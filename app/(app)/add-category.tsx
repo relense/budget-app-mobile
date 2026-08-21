@@ -52,8 +52,8 @@ const TOAST_DURATION_MS = 2500;
 export default function AddCategoryScreen() {
   const { colors, typography } = useTheme();
   const insets = useSafeAreaInsets();
-  const { data: currentMonth } = useCurrentMonth();
-  const month = currentMonth?.month;
+  const currentMonthQuery = useCurrentMonth();
+  const month = currentMonthQuery.data?.month;
   const categoriesQuery = useCategories();
   const expenseCategoryMonths = useCategoryMonths(month, 'EXPENSE');
   const createCategory = useCreateCategoryWithBudget();
@@ -90,7 +90,16 @@ export default function AddCategoryScreen() {
   // regardless of the real catalog. That both flips the screen from form -> choice mid-
   // interaction once the real data lands, and -- more seriously -- lets the duplicate-name
   // guard below be bypassed if the user confirms before this query resolves.
-  const catalogReady = !categoriesQuery.isLoading && !expenseCategoryMonths.isLoading && !!month;
+  //
+  // isError is checked separately from isLoading, not folded into one flag -- in react-query
+  // v5, a failed query has isLoading: false with data still undefined, the exact same "resolved
+  // but empty" shape the loading race above exploited. Without this, a failed fetch would silently
+  // reopen that same duplicate-guard bypass instead of surfacing an error.
+  const isCatalogLoading =
+    currentMonthQuery.isLoading || categoriesQuery.isLoading || expenseCategoryMonths.isLoading;
+  const isCatalogError =
+    currentMonthQuery.isError || categoriesQuery.isError || expenseCategoryMonths.isError;
+  const catalogReady = !isCatalogLoading && !isCatalogError && !!month;
   const unusedCategories = filterUnusedExpenseCategories(
     categoriesQuery.data ?? [],
     expenseCategoryMonths.data ?? [],
@@ -159,6 +168,19 @@ export default function AddCategoryScreen() {
     } catch {
       // createCategory.isError drives the inline error message below.
     }
+  }
+
+  if (isCatalogError) {
+    return (
+      <View
+        testID="add-category-error"
+        style={[styles.container, styles.centered, { backgroundColor: colors.background.screen }]}
+      >
+        <Text style={[styles.errorText, { color: colors.button.deleteBackground }]}>
+          Something went wrong loading this. Please try again.
+        </Text>
+      </View>
+    );
   }
 
   if (!catalogReady) {

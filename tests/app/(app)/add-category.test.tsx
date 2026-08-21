@@ -130,6 +130,30 @@ describe('AddCategoryScreen', () => {
     expect(screen.queryByTestId('category-name-input')).toBeNull();
   });
 
+  it('shows an error state instead of a false-empty create-new form when the catalog fetch fails', async () => {
+    // Regression test: react-query reports a failed query as isLoading: false with data still
+    // undefined -- the exact same "resolved but empty" shape the original loading race
+    // exploited. Without an explicit isError check, this would silently let the duplicate-name
+    // guard run against an empty catalog instead of surfacing an error.
+    mockedUseCategories.mockReturnValue({ data: undefined, isLoading: false, isError: true });
+
+    await renderScreen();
+
+    expect(screen.getByTestId('add-category-error')).toBeTruthy();
+    expect(screen.queryByTestId('add-category-loading')).toBeNull();
+    expect(screen.queryByTestId('category-name-input')).toBeNull();
+    expect(screen.queryByTestId('choose-existing-button')).toBeNull();
+  });
+
+  it('shows an error state when the current-month fetch fails, instead of spinning forever', async () => {
+    mockedUseCurrentMonth.mockReturnValue({ data: undefined, isLoading: false, isError: true });
+
+    await renderScreen();
+
+    expect(screen.getByTestId('add-category-error')).toBeTruthy();
+    expect(screen.queryByTestId('add-category-loading')).toBeNull();
+  });
+
   it('goes straight to the create-new form when no unused categories exist', async () => {
     await renderScreen();
 

@@ -198,7 +198,7 @@ default.
         "gamepad": "#F3C8E9"
       }
       ```
-      143 tests total across 25 suites.
+      145 tests total across 25 suites.
 
 **Scaffold caveats worth knowing before the next `npm install` in this
 repo** (SDK 57 is very new — pin these deliberately, don't let npm grab
