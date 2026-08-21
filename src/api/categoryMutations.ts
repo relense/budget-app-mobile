@@ -30,11 +30,29 @@ export interface CreateCategoryWithBudgetInput {
   monthlyBudgetCents: number;
 }
 
-// Plain, React-free function (accessToken passed explicitly, same reasoning as graphqlClient.ts)
-// so the actual create-then-activate sequencing is unit-testable without react-query --
+export interface AddCategoryToMonthInput {
+  categoryId: string;
+  month: string;
+  monthlyBudgetCents: number;
+}
+
+// Plain, React-free functions (accessToken passed explicitly, same reasoning as
+// graphqlClient.ts) so the actual mutation sequencing is unit-testable without react-query --
 // renderHook hangs when combined with react-query state in this environment (see
 // docs/PROGRESS-MOBILE.md), so hook-level behavior is only ever exercised through a full
-// screen render() test with this function's *hook* wrapper mocked at the module level.
+// screen render() test with each function's *hook* wrapper mocked at the module level.
+export async function addCategoryToMonth(
+  baseUrl: string,
+  accessToken: string,
+  input: AddCategoryToMonthInput,
+): Promise<void> {
+  await graphqlRequest(baseUrl, accessToken, ADD_CATEGORY_TO_MONTH_MUTATION, {
+    categoryId: input.categoryId,
+    month: input.month,
+    monthlyBudgetCents: input.monthlyBudgetCents,
+  });
+}
+
 export async function createCategoryWithBudget(
   baseUrl: string,
   accessToken: string,
@@ -55,7 +73,7 @@ export async function createCategoryWithBudget(
     },
   );
 
-  await graphqlRequest(baseUrl, accessToken, ADD_CATEGORY_TO_MONTH_MUTATION, {
+  await addCategoryToMonth(baseUrl, accessToken, {
     categoryId: createCategory.id,
     month: input.month,
     monthlyBudgetCents: input.monthlyBudgetCents,
@@ -69,6 +87,21 @@ export function useCreateCategoryWithBudget() {
   return useMutation({
     mutationFn: (input: CreateCategoryWithBudgetInput) =>
       createCategoryWithBudget(getApiUrl(), accessToken as string, input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['categoryMonths'] });
+    },
+  });
+}
+
+// For reactivating an existing catalog category into the current month, instead of always
+// creating a new one -- see filterUnusedExpenseCategories.
+export function useAddCategoryToMonth() {
+  const { accessToken } = useAuth();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: AddCategoryToMonthInput) =>
+      addCategoryToMonth(getApiUrl(), accessToken as string, input),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['categoryMonths'] });
     },

@@ -1,4 +1,4 @@
-import { createCategoryWithBudget } from '../../../src/api/categoryMutations';
+import { addCategoryToMonth, createCategoryWithBudget } from '../../../src/api/categoryMutations';
 import { graphqlRequest } from '../../../src/api/graphqlClient';
 
 jest.mock('../../../src/api/graphqlClient');
@@ -66,5 +66,32 @@ describe('createCategoryWithBudget', () => {
     ).rejects.toThrow('network error');
 
     expect(mockedGraphqlRequest).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('addCategoryToMonth', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('activates an existing category in the given month with the budget', async () => {
+    mockedGraphqlRequest.mockResolvedValueOnce({ addCategoryToMonth: { id: 'cm-1' } });
+
+    await addCategoryToMonth('http://api.test', 'token-1', {
+      categoryId: 'cat-1',
+      month: '2026-09',
+      monthlyBudgetCents: 5000,
+    });
+
+    expect(mockedGraphqlRequest).toHaveBeenCalledWith(
+      'http://api.test',
+      'token-1',
+      expect.stringContaining('addCategoryToMonth'),
+      {
+        categoryId: 'cat-1',
+        month: '2026-09',
+        monthlyBudgetCents: 5000,
+      },
+    );
   });
 });
