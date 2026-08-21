@@ -1,4 +1,10 @@
-import { addCategoryToMonth, createCategoryWithBudget } from '../../../src/api/categoryMutations';
+import {
+  addCategoryToMonth,
+  createCategoryWithBudget,
+  removeCategoryFromMonth,
+  updateCategory,
+  updateCategoryMonthBudget,
+} from '../../../src/api/categoryMutations';
 import { graphqlRequest } from '../../../src/api/graphqlClient';
 
 jest.mock('../../../src/api/graphqlClient');
@@ -91,6 +97,89 @@ describe('addCategoryToMonth', () => {
         categoryId: 'cat-1',
         month: '2026-09',
         monthlyBudgetCents: 5000,
+      },
+    );
+  });
+});
+
+describe('updateCategoryMonthBudget', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('updates an existing CategoryMonth with the new budget', async () => {
+    mockedGraphqlRequest.mockResolvedValueOnce({ updateCategoryMonthBudget: { id: 'cm-1' } });
+
+    await updateCategoryMonthBudget('http://api.test', 'token-1', {
+      categoryMonthId: 'cm-1',
+      monthlyBudgetCents: 12000,
+    });
+
+    expect(mockedGraphqlRequest).toHaveBeenCalledWith(
+      'http://api.test',
+      'token-1',
+      expect.stringContaining('updateCategoryMonthBudget'),
+      {
+        categoryMonthId: 'cm-1',
+        monthlyBudgetCents: 12000,
+      },
+    );
+  });
+});
+
+describe('updateCategory', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('sends every CategoryInput field, not just the one that changed', async () => {
+    mockedGraphqlRequest.mockResolvedValueOnce({ updateCategory: { id: 'cat-1' } });
+
+    await updateCategory('http://api.test', 'token-1', {
+      categoryId: 'cat-1',
+      name: 'Groceries',
+      icon: 'cart',
+      color: '#4CAF50',
+      budgetType: 'NEED',
+      direction: 'EXPENSE',
+    });
+
+    expect(mockedGraphqlRequest).toHaveBeenCalledWith(
+      'http://api.test',
+      'token-1',
+      expect.stringContaining('updateCategory'),
+      {
+        id: 'cat-1',
+        input: {
+          name: 'Groceries',
+          icon: 'cart',
+          color: '#4CAF50',
+          budgetType: 'NEED',
+          direction: 'EXPENSE',
+        },
+      },
+    );
+  });
+});
+
+describe('removeCategoryFromMonth', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('removes the CategoryMonth', async () => {
+    mockedGraphqlRequest.mockResolvedValueOnce({ removeCategoryFromMonth: true });
+
+    await removeCategoryFromMonth('http://api.test', 'token-1', {
+      categoryMonthId: 'cm-1',
+    });
+
+    expect(mockedGraphqlRequest).toHaveBeenCalledWith(
+      'http://api.test',
+      'token-1',
+      expect.stringContaining('removeCategoryFromMonth'),
+      {
+        categoryMonthId: 'cm-1',
       },
     );
   });
