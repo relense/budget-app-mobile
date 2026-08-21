@@ -6,6 +6,7 @@ import { useEffect } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AuthProvider, useAuth } from '../src/auth/AuthContext';
+import { SplashView } from '../src/components/SplashView';
 import { ThemeProvider } from '../src/theme/ThemeProvider';
 
 SplashScreen.preventAutoHideAsync();
@@ -16,14 +17,14 @@ function RootNavigator() {
   const { status } = useAuth();
 
   useEffect(() => {
-    if (status !== 'loading') {
-      SplashScreen.hideAsync();
-    }
-  }, [status]);
+    // Hand off from the native splash (solid mint-green, no image) to SplashView (same
+    // background color, plus the wordmark) as soon as JS has mounted -- not once auth
+    // resolves, so there's no flash of a blank/white screen while bootstrap is in flight.
+    SplashScreen.hideAsync();
+  }, []);
 
   if (status === 'loading') {
-    // Splash screen is still visible -- nothing to render underneath it yet.
-    return null;
+    return <SplashView />;
   }
 
   return (

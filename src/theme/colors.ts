@@ -52,6 +52,10 @@ export const lightColors = {
     inactiveIcon: '#1A1A1A',
     background: '#FFFFFF',
   },
+  identity: {
+    // Not from the mockups -- a user-specified accent, used as the OTP code boxes' filled state.
+    badgeBackground: '#FFCCDB',
+  },
 } as const;
 
 export type Colors = typeof lightColors;
