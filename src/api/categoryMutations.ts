@@ -89,6 +89,10 @@ export function useCreateCategoryWithBudget() {
       createCategoryWithBudget(getApiUrl(), accessToken as string, input),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['categoryMonths'] });
+      // This mutation also creates a brand-new catalog entry (unlike useAddCategoryToMonth
+      // below, which only reactivates an existing one) -- the catalog itself changed, so the
+      // next Add Category open needs a fresh categories list too.
+      queryClient.invalidateQueries({ queryKey: ['categories'] });
     },
   });
 }

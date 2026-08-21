@@ -92,6 +92,44 @@ beforeEach(() => {
 });
 
 describe('AddCategoryScreen', () => {
+  it('shows a loading state instead of the create-new form while the catalog is still loading', async () => {
+    mockedUseCategories.mockReturnValue({ data: undefined, isLoading: true, isError: false });
+
+    await renderScreen();
+
+    expect(screen.getByTestId('add-category-loading')).toBeTruthy();
+    expect(screen.queryByTestId('category-name-input')).toBeNull();
+    expect(screen.queryByTestId('choose-existing-button')).toBeNull();
+  });
+
+  it('shows the choice screen (not a premature create-new form) once a slow catalog fetch resolves with unused categories', async () => {
+    // Regression test: useCategories is only ever called from this screen (unlike
+    // useCategoryMonths, which Home already warms), so its first render is `isLoading: true`.
+    // Before the catalogReady gate, that briefly resolved unusedCategories as empty and showed
+    // the create-new form, which then flipped to the choice screen once data landed.
+    mockedUseCategories.mockReturnValue({ data: undefined, isLoading: true, isError: false });
+    const { rerender } = await renderScreen();
+
+    expect(screen.getByTestId('add-category-loading')).toBeTruthy();
+
+    mockedUseCategories.mockReturnValue({
+      data: [gasCategory],
+      isLoading: false,
+      isError: false,
+    });
+    await rerender(
+      <SafeAreaProvider initialMetrics={testSafeAreaMetrics}>
+        <ThemeProvider>
+          <AddCategoryScreen />
+        </ThemeProvider>
+      </SafeAreaProvider>,
+    );
+
+    expect(screen.queryByTestId('add-category-loading')).toBeNull();
+    expect(screen.getByTestId('choose-existing-button')).toBeTruthy();
+    expect(screen.queryByTestId('category-name-input')).toBeNull();
+  });
+
   it('goes straight to the create-new form when no unused categories exist', async () => {
     await renderScreen();
 
@@ -295,6 +333,38 @@ describe('AddCategoryScreen', () => {
       });
       expect(createMutateAsync).not.toHaveBeenCalled();
       expect(mockedRouterBack).toHaveBeenCalled();
+    });
+
+    it('shows an error message and does not navigate back when adding an existing category fails', async () => {
+      addExistingMutateAsync.mockRejectedValue(new Error('network error'));
+      mockedUseAddCategoryToMonth.mockReturnValue({
+        mutateAsync: addExistingMutateAsync,
+        isPending: false,
+        isError: true,
+      });
+      await renderScreen();
+
+      await fireEvent.press(screen.getByTestId('choose-existing-button'));
+      await fireEvent.press(screen.getByTestId('existing-category-cat-gas'));
+      await fireEvent.press(screen.getByTestId('keypad-confirm'));
+
+      expect(screen.getByText('Something went wrong. Please try again.')).toBeTruthy();
+      expect(mockedRouterBack).not.toHaveBeenCalled();
+    });
+
+    it('going back from "Create New" and choosing it again starts with a genuinely blank form', async () => {
+      await renderScreen();
+
+      await fireEvent.press(screen.getByTestId('choose-new-button'));
+      await fireEvent.press(screen.getByTestId('icon-pill'));
+      await fireEvent.press(screen.getByTestId('icon-option-heart'));
+      await fireEvent.changeText(screen.getByTestId('category-name-input'), 'Health');
+
+      await fireEvent.press(screen.getByTestId('back-to-choice'));
+      await fireEvent.press(screen.getByTestId('choose-new-button'));
+
+      expect(screen.getByDisplayValue('')).toBeTruthy();
+      expect(screen.queryByDisplayValue('Health')).toBeNull();
     });
 
     it('selecting an existing category also shows a back button, letting the user reconsider', async () => {

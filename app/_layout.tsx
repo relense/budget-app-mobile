@@ -40,7 +40,7 @@ function RootNavigator() {
 }
 
 export default function RootLayout() {
-  const [fontsLoaded] = useFonts({
+  const [fontsLoaded, fontError] = useFonts({
     Fredoka_400Regular,
     Fredoka_500Medium,
     Fredoka_600SemiBold,
@@ -52,12 +52,18 @@ export default function RootLayout() {
     // background color, plus the wordmark) once the custom font is ready -- not merely once JS
     // has mounted -- so SplashView's own text never flashes in the system font first. Still
     // doesn't wait for auth bootstrap to resolve; SplashView covers that separately below.
-    if (fontsLoaded) {
+    // Also proceeds on a font-loading error rather than hiding only on success -- otherwise a
+    // failed font load (bad network on first install, corrupted asset) left the app stuck on
+    // the native splash forever, with no way to proceed and nothing logged.
+    if (fontsLoaded || fontError) {
+      if (fontError) {
+        console.error('Font loading failed, proceeding with fallback fonts', fontError);
+      }
       SplashScreen.hideAsync();
     }
-  }, [fontsLoaded]);
+  }, [fontsLoaded, fontError]);
 
-  if (!fontsLoaded) {
+  if (!fontsLoaded && !fontError) {
     return null;
   }
 

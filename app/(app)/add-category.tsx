@@ -1,7 +1,16 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Keyboard, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Keyboard,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useCategoryMonths, useCurrentMonth } from '../../src/api/budgetHomeQueries';
@@ -75,6 +84,13 @@ export default function AddCategoryScreen() {
     return () => clearTimeout(timer);
   }, [toastMessage]);
 
+  // `useCategories` is only ever called from this screen, unlike `useCategoryMonths` (which
+  // Home already warms the cache for) -- without this gate, the catalog query's first-render
+  // `undefined` defaults to an empty array, so `unusedCategories` is briefly computed as empty
+  // regardless of the real catalog. That both flips the screen from form -> choice mid-
+  // interaction once the real data lands, and -- more seriously -- lets the duplicate-name
+  // guard below be bypassed if the user confirms before this query resolves.
+  const catalogReady = !categoriesQuery.isLoading && !expenseCategoryMonths.isLoading && !!month;
   const unusedCategories = filterUnusedExpenseCategories(
     categoriesQuery.data ?? [],
     expenseCategoryMonths.data ?? [],
@@ -98,7 +114,7 @@ export default function AddCategoryScreen() {
   // Disabled until the user has picked a category one way or another -- the budget amount
   // itself can always be typed in the meantime, only confirming is gated.
   const canSubmit =
-    !!month &&
+    catalogReady &&
     !isPending &&
     (isExisting ? true : resolvedMode === 'new' ? name.trim().length > 0 : false);
 
@@ -145,6 +161,17 @@ export default function AddCategoryScreen() {
     }
   }
 
+  if (!catalogReady) {
+    return (
+      <View
+        testID="add-category-loading"
+        style={[styles.container, styles.centered, { backgroundColor: colors.background.screen }]}
+      >
+        <ActivityIndicator color={colors.text.primary} />
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background.screen }]}>
       <View style={styles.grabberRow}>
@@ -182,6 +209,12 @@ export default function AddCategoryScreen() {
                 onPress={() => {
                   setCategoryMode('undecided');
                   setSelectedExisting(null);
+                  // Otherwise a stale name/icon/budget-type from before "back" was pressed
+                  // would silently carry over into a fresh "Create New" -- this should start
+                  // genuinely blank, not resume whatever was typed the first time around.
+                  setName('');
+                  setIcon('cart');
+                  setBudgetType('NEED');
                 }}
               >
                 <MaterialCommunityIcons name="chevron-left" size={22} color={colors.text.primary} />
@@ -331,6 +364,10 @@ export default function AddCategoryScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  centered: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   grabberRow: {
     alignItems: 'center',
