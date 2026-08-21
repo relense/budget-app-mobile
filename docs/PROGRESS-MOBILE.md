@@ -64,13 +64,37 @@ export/delete, missing `User` FK retrofit) and GraphQL Code Generator on top.
 
 ## Phase 2 — Mobile app
 
-**Status: not started.** Per `docs/PLAN.md` / `.claude/CLAUDE.md`: before
-any screen work, must interview for design references (mockups + Excel
-structure) and grill layout/states/copy/colors/edge-cases per screen —
-never assume or fill gaps with a "reasonable" default.
+**Status: scaffold done, no screens yet.** Per `docs/PLAN.md` /
+`.claude/CLAUDE.md`: before any screen work, must interview for design
+references (mockups + Excel structure) and grill layout/states/copy/colors/
+edge-cases per screen — never assume or fill gaps with a "reasonable"
+default.
 
 - [ ] Design references reviewed (mockups + Excel structure)
-- [ ] Expo project scaffold (TypeScript, Expo Router, `graphql-request` +
-      `@tanstack/react-query`, Jest + React Native Testing Library)
+- [x] Expo project scaffold (TypeScript, Expo Router, `graphql-request` +
+      `@tanstack/react-query`, ESLint + Prettier, Jest + React Native
+      Testing Library) — SDK 57, `npm`, bundle id
+      `com.relense.budgettracker`. `app.config.ts` reads `API_URL` from
+      `.env` (via `expo-constants`); `src/lib/apiUrl.ts` handles the
+      Android-emulator `localhost` → `10.0.2.2` rewrite in dev.
 - [ ] Auth flow (OTP request/verify screens, token storage, silent refresh)
 - [ ] First screen — TBD, pending design interview
+
+**Scaffold caveats worth knowing before the next `npm install` in this
+repo** (SDK 57 is very new — pin these deliberately, don't let npm grab
+latest):
+- `jest` must stay on `^29.x` — `jest-expo@57.0.4` depends on
+  `@jest/globals@^29.2.1` internally; `jest@30` breaks the mocker
+  (`clearMocksOnScope` mismatch).
+- `@react-native/jest-preset` must stay on `^0.86.2` (matching
+  `react-native`'s own version) — a newer version's `setup-env.js` doesn't
+  match this RN version's source layout.
+- `.npmrc` sets `legacy-peer-deps=true` — `expo-router@57.0.15`'s bundled
+  `@expo/ui` transitively pulls in several `@radix-ui/*` packages and
+  `vaul` (web-only Tabs-picker components, unused on native), each of
+  which declares `react-dom` as a **required** peer (`^16.8`..`^19.0.0-rc`
+  range) — but this is a mobile-only project, so `react-dom` isn't
+  installed anywhere in the tree to satisfy any of them. Verified directly
+  against `package-lock.json`, not just the resolver's warning. Safe to
+  remove once `expo-router`/`@expo/ui` mark that peer optional or stop
+  bundling web-only deps into the native install.
