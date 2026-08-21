@@ -4,6 +4,10 @@ import { EXPENSE_ICON_PALETTE } from '../lib/categoryIconPalette';
 import { useTheme } from '../theme/ThemeProvider';
 import { CategoryIcon } from './CategoryIcon';
 
+// Dark gray rather than pure black -- a plain outline in text.primary read as too harsh/heavy
+// against these pastel backgrounds.
+const SELECTED_OUTLINE_COLOR = '#4D4D4D';
+
 export function IconPicker({
   selectedIcon,
   onSelect,
@@ -28,7 +32,7 @@ export function IconPicker({
               // An outline instead of a solid fill on selection -- filling the circle with a
               // different color made it look like *that* was the color being chosen, when the
               // color is actually fixed per icon and never independently pickable.
-              selected && { borderWidth: 2, borderColor: colors.text.primary },
+              selected && { borderWidth: 2, borderColor: SELECTED_OUTLINE_COLOR },
             ]}
           >
             <CategoryIcon name={icon} color={colors.text.primary} size={20} />
