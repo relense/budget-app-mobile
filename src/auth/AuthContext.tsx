@@ -19,39 +19,49 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     async function bootstrap() {
-      const stored = await getStoredTokens();
-      if (!stored) {
-        dispatch({ type: 'BOOTSTRAP_SIGNED_OUT' });
-        return;
-      }
-
-      // Mandatory rotation on refresh means the stored refresh token is single-use -- this
-      // bootstrap call both validates the session and rotates it in one step. A rejected/
-      // expired refresh token is a real "sign out" case; a successful refresh followed by a
-      // local persistence failure is not -- the tokens are valid, just not saved to disk, so
-      // the user stays signed in for this session rather than being wrongly bounced to the
-      // login screen. Keeping these as two separate try blocks is what makes that distinction
-      // possible instead of collapsing both into one generic catch.
-      let rotated;
+      // Wraps the whole function, not just the parts below that already handle their own
+      // specific failure -- this is fire-and-forget (no .catch at the call site below), so
+      // any unexpected throw here (e.g. SecureStore.getItemAsync itself rejecting on a native
+      // keychain/keystore error, not just returning a corrupt value) must never leave `status`
+      // stuck at 'loading' forever with the app stranded on the splash screen.
       try {
-        rotated = await refreshSession(getApiUrl(), stored.refreshToken);
-      } catch (err) {
-        console.warn('Auth bootstrap: refresh token rejected, signing out', err);
-        await clearStoredTokens();
-        dispatch({ type: 'BOOTSTRAP_SIGNED_OUT' });
-        return;
-      }
+        const stored = await getStoredTokens();
+        if (!stored) {
+          dispatch({ type: 'BOOTSTRAP_SIGNED_OUT' });
+          return;
+        }
 
-      try {
-        await setStoredTokens(rotated);
+        // Mandatory rotation on refresh means the stored refresh token is single-use -- this
+        // bootstrap call both validates the session and rotates it in one step. A rejected/
+        // expired refresh token is a real "sign out" case; a successful refresh followed by a
+        // local persistence failure is not -- the tokens are valid, just not saved to disk, so
+        // the user stays signed in for this session rather than being wrongly bounced to the
+        // login screen. Keeping these as two separate try blocks is what makes that
+        // distinction possible instead of collapsing both into one generic catch.
+        let rotated;
+        try {
+          rotated = await refreshSession(getApiUrl(), stored.refreshToken);
+        } catch (err) {
+          console.warn('Auth bootstrap: refresh token rejected, signing out', err);
+          await clearStoredTokens();
+          dispatch({ type: 'BOOTSTRAP_SIGNED_OUT' });
+          return;
+        }
+
+        try {
+          await setStoredTokens(rotated);
+        } catch (err) {
+          console.warn(
+            'Auth bootstrap: refreshed tokens could not be persisted locally; continuing ' +
+              'signed in for this session only',
+            err,
+          );
+        }
+        dispatch({ type: 'BOOTSTRAP_SIGNED_IN', ...rotated });
       } catch (err) {
-        console.warn(
-          'Auth bootstrap: refreshed tokens could not be persisted locally; continuing ' +
-            'signed in for this session only',
-          err,
-        );
+        console.warn('Auth bootstrap: unexpected error, signing out', err);
+        dispatch({ type: 'BOOTSTRAP_SIGNED_OUT' });
       }
-      dispatch({ type: 'BOOTSTRAP_SIGNED_IN', ...rotated });
     }
 
     bootstrap();

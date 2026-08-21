@@ -84,10 +84,11 @@ export default function VerifyScreen() {
   }
 
   async function handleResend() {
-    // Also guards against a slow in-flight verify resolving after resend has already reset
-    // `status` -- without this, its catch block could flip `status` back to 'error' right
+    // Mirrors the Pressable's own `disabled={resendDisabled}` -- also guards here directly
+    // against a slow in-flight verify resolving after resend has already reset `status`,
+    // since without it that verify's catch block could flip `status` back to 'error' right
     // after resend just cleared it.
-    if (secondsLeft > 0 || isVerifyingRef.current) return;
+    if (resendDisabled) return;
     setStatus('idle');
     setErrorMessage(null);
     setCode('');
@@ -106,6 +107,11 @@ export default function VerifyScreen() {
   }
 
   const boxes = Array.from({ length: CODE_LENGTH }, (_, i) => code[i] ?? '');
+  // `status === 'submitting'` covers the same window as isVerifyingRef but is reactive state,
+  // so (unlike the ref) it can actually drive the button's visual disabled appearance --
+  // without this, a tap during that window looked identical to an enabled button but silently
+  // no-op'd via the ref check inside handleResend.
+  const resendDisabled = secondsLeft > 0 || status === 'submitting';
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background.screen }]}>
@@ -174,18 +180,18 @@ export default function VerifyScreen() {
 
         <Pressable
           onPress={handleResend}
-          disabled={secondsLeft > 0}
+          disabled={resendDisabled}
           style={[
             styles.resendButton,
             {
-              backgroundColor: secondsLeft > 0 ? colors.segment.track : colors.segment.active,
+              backgroundColor: resendDisabled ? colors.segment.track : colors.segment.active,
             },
           ]}
         >
           <Text
             style={[
               styles.resendLabel,
-              { color: secondsLeft > 0 ? colors.segment.inactiveText : colors.segment.activeText },
+              { color: resendDisabled ? colors.segment.inactiveText : colors.segment.activeText },
             ]}
           >
             {secondsLeft > 0

@@ -117,4 +117,39 @@ describe('VerifyScreen', () => {
       jest.useRealTimers();
     }
   });
+
+  it('does not let resend run while a verify call is still in flight', async () => {
+    jest.useFakeTimers();
+    try {
+      let resolveVerify: (value: unknown) => void = () => {};
+      mockedVerifyOtp.mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            resolveVerify = resolve;
+          }),
+      );
+      await renderVerify();
+
+      await act(async () => {
+        jest.advanceTimersByTime(30_000);
+      });
+
+      await fireEvent.changeText(screen.getByDisplayValue(''), 'AB12CD');
+      await waitFor(() => expect(mockedVerifyOtp).toHaveBeenCalled());
+
+      await fireEvent.press(screen.getByText('Resend code'));
+      expect(mockedRequestOtp).not.toHaveBeenCalled();
+
+      await act(async () => {
+        resolveVerify({
+          accessToken: 'access-1',
+          refreshToken: 'refresh-1',
+          user: { id: 'u1', email: 'user@example.com' },
+        });
+      });
+      await waitFor(() => expect(mockSignIn).toHaveBeenCalled());
+    } finally {
+      jest.useRealTimers();
+    }
+  });
 });
