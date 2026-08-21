@@ -15,22 +15,33 @@ const DIGIT_ROWS = [
 // add expense, add recurring expense, savings deposit/withdraw -- see mockups/*.png). Only
 // digits/decimal/backspace/confirm are wired here; the "€" key is currently a static visual
 // key (no flow needs it to do anything yet -- e.g. sign-toggling for deposit/withdraw isn't
-// built). There's no calendar/date key slot yet since no consumer needs one so far -- confirm
-// simply takes up that space (spans 3 of the 4 rows, delete takes the 4th) instead of leaving
-// it blank. Every key sizes itself via flex (no fixed dimensions), so the whole grid grows or
+// built). Every key sizes itself via flex (no fixed dimensions), so the whole grid grows or
 // shrinks with however much space its container gives it.
+//
+// The calendar/date-toggle key (mockups/Shopping Add icon pressed.png + Shopping calendar
+// pressed.png) is opt-in via `onToggleDateMode` -- when omitted (add-category, edit-category),
+// the action column keeps its original 2-key layout (backspace + confirm spanning the rest).
+// When passed (add-transaction), a third key is inserted between them: a calendar icon in
+// amount mode, or a "€" back-to-amount icon in date mode (`dateMode`). The digit/decimal/
+// backspace callbacks are unchanged either way -- this component stays presentation-only and
+// has no opinion on what a "date digit" means; the caller interprets presses differently based
+// on its own `dateMode` state.
 export function AmountKeypad({
   onDigit,
   onDecimalPoint,
   onBackspace,
   onConfirm,
   confirmDisabled = false,
+  dateMode = false,
+  onToggleDateMode,
 }: {
   onDigit: (digit: string) => void;
   onDecimalPoint: () => void;
   onBackspace: () => void;
   onConfirm: () => void;
   confirmDisabled?: boolean;
+  dateMode?: boolean;
+  onToggleDateMode?: () => void;
 }) {
   const { colors, typography } = useTheme();
 
@@ -95,11 +106,30 @@ export function AmountKeypad({
             color={colors.text.primary}
           />
         </Pressable>
+        {onToggleDateMode ? (
+          <Pressable
+            testID="keypad-toggle-date"
+            style={[styles.key, { backgroundColor: colors.keypad.toggleKeyBackground }]}
+            onPress={onToggleDateMode}
+          >
+            {dateMode ? (
+              <Text style={[typography.scale.keypadDigit, { color: colors.keypad.digitText }]}>
+                €
+              </Text>
+            ) : (
+              <MaterialCommunityIcons
+                name="calendar-outline"
+                size={KEY_ICON_SIZE}
+                color={colors.text.primary}
+              />
+            )}
+          </Pressable>
+        ) : null}
         <Pressable
           testID="keypad-confirm"
           disabled={confirmDisabled}
           style={[
-            styles.confirmKey,
+            onToggleDateMode ? styles.confirmKeyWithDateToggle : styles.confirmKey,
             {
               backgroundColor: colors.keypad.confirmKeyBackground,
               opacity: confirmDisabled ? 0.4 : 1,
@@ -145,6 +175,15 @@ const styles = StyleSheet.create({
   },
   confirmKey: {
     flex: 3,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  // With the date-toggle key present, the action column holds 3 keys (backspace, toggle,
+  // confirm) instead of 2 -- confirm gives up one flex unit to it so the column still sums to
+  // 4, matching the 4-row digit grid's height.
+  confirmKeyWithDateToggle: {
+    flex: 2,
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
