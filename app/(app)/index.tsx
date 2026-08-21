@@ -1,4 +1,5 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import { router } from 'expo-router';
 import { useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -126,8 +127,8 @@ export default function HomeScreen() {
       return (expenseCategoryMonths.data ?? []).map((cm) => (
         <ListRow
           key={cm.id}
-          icon={<CategoryIcon name={cm.category.icon} color={cm.category.color} />}
-          circleColor={`${cm.category.color}33`}
+          icon={<CategoryIcon name={cm.category.icon} color={colors.text.primary} />}
+          circleColor={cm.category.color}
           title={cm.category.name}
           subtitle="Available"
           amountText={formatCents(cm.monthlyBudgetCents - cm.actualAmountCents)}
@@ -139,13 +140,8 @@ export default function HomeScreen() {
       return expenseTransactions.map((t) => (
         <ListRow
           key={t.id}
-          icon={
-            <CategoryIcon
-              name={t.categoryMonth.category.icon}
-              color={t.categoryMonth.category.color}
-            />
-          }
-          circleColor={`${t.categoryMonth.category.color}33`}
+          icon={<CategoryIcon name={t.categoryMonth.category.icon} color={colors.text.primary} />}
+          circleColor={t.categoryMonth.category.color}
           title={t.merchant ?? t.categoryMonth.category.name}
           subtitle={formatDate(t.date)}
           amountText={formatCents(t.amountCents)}
@@ -163,12 +159,10 @@ export default function HomeScreen() {
               re.paidThisMonth ? (
                 <MaterialCommunityIcons name="check" size={20} color={colors.status.paid.text} />
               ) : (
-                <CategoryIcon name={re.category.icon} color={re.category.color} />
+                <CategoryIcon name={re.category.icon} color={colors.text.primary} />
               )
             }
-            circleColor={
-              re.paidThisMonth ? colors.status.paid.background : `${re.category.color}33`
-            }
+            circleColor={re.paidThisMonth ? colors.status.paid.background : re.category.color}
             title={re.name}
             subtitle={re.paidThisMonth ? (date ? formatDate(date) : 'Paid') : 'Unpaid'}
             amountText={formatCents(re.amountCents)}
@@ -182,8 +176,8 @@ export default function HomeScreen() {
       return (
         <ListRow
           key={cm.id}
-          icon={<CategoryIcon name={cm.category.icon} color={cm.category.color} />}
-          circleColor={`${cm.category.color}33`}
+          icon={<CategoryIcon name={cm.category.icon} color={colors.text.primary} />}
+          circleColor={cm.category.color}
           title={cm.category.name}
           subtitle={date ? formatDate(date) : undefined}
           amountText={formatCents(cm.actualAmountCents)}
@@ -313,7 +307,9 @@ export default function HomeScreen() {
       ) : null}
 
       <ScrollView contentContainerStyle={styles.listContent}>
-        {tab === 'AVAILABLE' ? <AddRow label="New budget category" /> : null}
+        {tab === 'AVAILABLE' ? (
+          <AddRow label="New budget category" onPress={() => router.push('/add-category')} />
+        ) : null}
         {tab === 'RECURRENT' ? <AddRow label="New recurrent expense" /> : null}
         {tab === 'INCOME' ? <AddRow label="New income" /> : null}
 
