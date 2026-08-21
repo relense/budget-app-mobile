@@ -46,6 +46,9 @@
   },
   "private": true,
   "jest": {
-    "preset": "jest-expo"
+    "preset": "jest-expo",
+    "testMatch": [
+      "<rootDir>/tests/**/*.test.[jt]s?(x)"
+    ]
   }
 }

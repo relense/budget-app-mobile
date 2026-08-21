@@ -1,4 +1,4 @@
-import { OtpVerifyError, requestOtp, refreshSession, verifyOtp } from './authApi';
+import { OtpVerifyError, requestOtp, refreshSession, verifyOtp } from '../../../src/auth/authApi';
 
 const BASE_URL = 'http://localhost:4400';
 

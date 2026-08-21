@@ -1,18 +1,18 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 
-import { useAuth } from '../../src/auth/AuthContext';
-import { OtpVerifyError, verifyOtp } from '../../src/auth/authApi';
-import { ThemeProvider } from '../../src/theme/ThemeProvider';
-import VerifyScreen from './verify';
+import { useAuth } from '../../../src/auth/AuthContext';
+import { OtpVerifyError, verifyOtp } from '../../../src/auth/authApi';
+import { ThemeProvider } from '../../../src/theme/ThemeProvider';
+import VerifyScreen from '../../../app/(auth)/verify';
 
 jest.mock('expo-router', () => ({
   useLocalSearchParams: () => ({ email: 'user@example.com' }),
 }));
-jest.mock('../../src/auth/authApi', () => ({
-  ...jest.requireActual('../../src/auth/authApi'),
+jest.mock('../../../src/auth/authApi', () => ({
+  ...jest.requireActual('../../../src/auth/authApi'),
   verifyOtp: jest.fn(),
 }));
-jest.mock('../../src/auth/AuthContext');
+jest.mock('../../../src/auth/AuthContext');
 
 const mockedVerifyOtp = verifyOtp as jest.Mock;
 const mockedUseAuth = useAuth as jest.Mock;

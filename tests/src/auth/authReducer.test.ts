@@ -1,4 +1,4 @@
-import { authReducer, type AuthState } from './authReducer';
+import { authReducer, type AuthState } from '../../../src/auth/authReducer';
 
 const tokens = { accessToken: 'access-1', refreshToken: 'refresh-1' };
 

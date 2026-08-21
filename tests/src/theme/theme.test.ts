@@ -1,4 +1,4 @@
-import { resolveTheme } from './theme';
+import { resolveTheme } from '../../../src/theme/theme';
 
 describe('resolveTheme', () => {
   it('returns the light theme for scheme "light"', () => {

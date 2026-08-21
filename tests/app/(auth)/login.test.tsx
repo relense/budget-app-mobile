@@ -1,13 +1,13 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { router } from 'expo-router';
 
-import { OtpRequestError, requestOtp } from '../../src/auth/authApi';
-import { ThemeProvider } from '../../src/theme/ThemeProvider';
-import LoginScreen from './login';
+import { OtpRequestError, requestOtp } from '../../../src/auth/authApi';
+import { ThemeProvider } from '../../../src/theme/ThemeProvider';
+import LoginScreen from '../../../app/(auth)/login';
 
 jest.mock('expo-router', () => ({ router: { push: jest.fn() } }));
-jest.mock('../../src/auth/authApi', () => ({
-  ...jest.requireActual('../../src/auth/authApi'),
+jest.mock('../../../src/auth/authApi', () => ({
+  ...jest.requireActual('../../../src/auth/authApi'),
   requestOtp: jest.fn(),
 }));
 
