@@ -1,0 +1,228 @@
+import { fireEvent, render, screen } from '@testing-library/react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+
+const testSafeAreaMetrics = {
+  frame: { x: 0, y: 0, width: 390, height: 844 },
+  insets: { top: 47, left: 0, right: 0, bottom: 34 },
+};
+
+import {
+  useBankBalance,
+  useCategoryMonths,
+  useCurrentMonth,
+  useRecurringExpenses,
+  useTransactions,
+} from '../../../src/api/budgetHomeQueries';
+import { useAuth } from '../../../src/auth/AuthContext';
+import { ThemeProvider } from '../../../src/theme/ThemeProvider';
+import HomeScreen from '../../../app/(app)/index';
+
+jest.mock('../../../src/api/budgetHomeQueries');
+jest.mock('../../../src/auth/AuthContext');
+
+const mockedUseCurrentMonth = useCurrentMonth as jest.Mock;
+const mockedUseCategoryMonths = useCategoryMonths as jest.Mock;
+const mockedUseRecurringExpenses = useRecurringExpenses as jest.Mock;
+const mockedUseTransactions = useTransactions as jest.Mock;
+const mockedUseBankBalance = useBankBalance as jest.Mock;
+const mockedUseAuth = useAuth as jest.Mock;
+const mockSignOut = jest.fn();
+
+const idle = { data: undefined, isLoading: false, isError: false };
+
+const expenseCategoryMonths = [
+  {
+    id: 'cm-shopping',
+    month: '2026-09',
+    monthlyBudgetCents: 70000,
+    actualAmountCents: 19420,
+    recurringCommittedCents: 0,
+    category: {
+      id: 'c-shopping',
+      name: 'Shopping',
+      icon: 'cart',
+      color: '#4C6EF5',
+      budgetType: 'NEED',
+      direction: 'EXPENSE',
+    },
+    transactions: [],
+  },
+  {
+    id: 'cm-eating-out',
+    month: '2026-09',
+    monthlyBudgetCents: 20000,
+    actualAmountCents: 5000,
+    recurringCommittedCents: 0,
+    category: {
+      id: 'c-eating-out',
+      name: 'Eating Out',
+      icon: 'utensils',
+      color: '#F76707',
+      budgetType: 'WANT',
+      direction: 'EXPENSE',
+    },
+    transactions: [],
+  },
+];
+
+const incomeCategoryMonths = [
+  {
+    id: 'cm-obconnect',
+    month: '2026-09',
+    monthlyBudgetCents: 430000,
+    actualAmountCents: 368600,
+    recurringCommittedCents: 0,
+    category: {
+      id: 'c-obconnect',
+      name: 'Obconnect',
+      icon: 'briefcase',
+      color: '#2F9E44',
+      budgetType: null,
+      direction: 'INCOME',
+    },
+    transactions: [{ date: '2026-09-01' }],
+  },
+];
+
+const recurringExpenses = [
+  {
+    id: 're-water',
+    month: '2026-09',
+    name: 'Water',
+    amountCents: 2196,
+    budgetType: 'NEED',
+    dueDay: 10,
+    paidThisMonth: false,
+    category: {
+      id: 'c-shopping',
+      name: 'Shopping',
+      icon: 'cart',
+      color: '#4C6EF5',
+      budgetType: 'NEED',
+      direction: 'EXPENSE',
+    },
+    transactions: [],
+  },
+];
+
+const transactions = [
+  {
+    id: 't-continente',
+    amountCents: 968,
+    date: '2026-09-02',
+    merchant: 'Continente',
+    note: null,
+    direction: 'EXPENSE',
+    categoryMonth: {
+      id: 'cm-shopping',
+      monthlyBudgetCents: 70000,
+      category: {
+        id: 'c-shopping',
+        name: 'Shopping',
+        icon: 'cart',
+        color: '#4C6EF5',
+        budgetType: 'NEED',
+        direction: 'EXPENSE',
+      },
+    },
+  },
+];
+
+function renderHomeScreen() {
+  return render(
+    <SafeAreaProvider initialMetrics={testSafeAreaMetrics}>
+      <ThemeProvider>
+        <HomeScreen />
+      </ThemeProvider>
+    </SafeAreaProvider>,
+  );
+}
+
+beforeEach(() => {
+  jest.clearAllMocks();
+  mockedUseAuth.mockReturnValue({ signOut: mockSignOut });
+  mockedUseCurrentMonth.mockReturnValue({ ...idle, data: { month: '2026-09', locked: false } });
+  mockedUseCategoryMonths.mockImplementation((_month: string, direction: string) => ({
+    ...idle,
+    data: direction === 'EXPENSE' ? expenseCategoryMonths : incomeCategoryMonths,
+  }));
+  mockedUseRecurringExpenses.mockReturnValue({ ...idle, data: recurringExpenses });
+  mockedUseTransactions.mockReturnValue({ ...idle, data: transactions });
+  mockedUseBankBalance.mockReturnValue({
+    ...idle,
+    data: {
+      amountCents: 28287,
+      checkpointAmountCents: 0,
+      checkpointSetAt: '2026-01-01T00:00:00.000Z',
+    },
+  });
+});
+
+describe('HomeScreen', () => {
+  it('shows the Available Budgeted total and the current month by default', async () => {
+    await renderHomeScreen();
+
+    expect(screen.getByText('Available Budgeted')).toBeTruthy();
+    expect(screen.getByText('September')).toBeTruthy();
+    // (70000 - 19420) + (20000 - 5000) = 65580 cents
+    expect(screen.getByText('€655.80')).toBeTruthy();
+  });
+
+  it('shows expense categories on the Available tab, with the "new" row', async () => {
+    await renderHomeScreen();
+
+    expect(screen.getByText('New budget category')).toBeTruthy();
+    expect(screen.getByText('Shopping')).toBeTruthy();
+    expect(screen.getByText('Eating Out')).toBeTruthy();
+    // The "Available" tab label itself, plus one "Available" subtitle per row (2 categories).
+    expect(screen.getAllByText('Available')).toHaveLength(3);
+  });
+
+  it('switches to the Expenses tab and shows transactions with merchant names', async () => {
+    await renderHomeScreen();
+
+    await fireEvent.press(screen.getByText('Expenses'));
+
+    expect(screen.getByText('Continente')).toBeTruthy();
+    expect(screen.queryByText('New budget category')).toBeNull();
+  });
+
+  it('switches to the Recurrent tab and shows the "new" row plus bills', async () => {
+    await renderHomeScreen();
+
+    await fireEvent.press(screen.getByText('Recurrent'));
+
+    expect(screen.getByText('New recurrent expense')).toBeTruthy();
+    expect(screen.getByText('Water')).toBeTruthy();
+    expect(screen.getByText('Unpaid')).toBeTruthy();
+  });
+
+  it('switches to the Income tab and shows both actual and expected amounts', async () => {
+    await renderHomeScreen();
+
+    await fireEvent.press(screen.getByText('Income'));
+
+    expect(screen.getByText('New income')).toBeTruthy();
+    expect(screen.getByText('Obconnect')).toBeTruthy();
+    expect(screen.getByText('€3,686.00')).toBeTruthy();
+    expect(screen.getByText('€4,300.00')).toBeTruthy();
+  });
+
+  it('opens the header metric menu and switches to Total Balance', async () => {
+    await renderHomeScreen();
+
+    await fireEvent.press(screen.getByText('Available Budgeted'));
+    await fireEvent.press(screen.getByText('Total Balance'));
+
+    expect(screen.getByText('Total Balance')).toBeTruthy();
+    expect(screen.getByText('€282.87')).toBeTruthy();
+  });
+
+  it('signs out when the profile icon is pressed', async () => {
+    await renderHomeScreen();
+
+    await fireEvent.press(screen.getByTestId('sign-out-button'));
+
+    expect(mockSignOut).toHaveBeenCalled();
+  });
+});
