@@ -6,6 +6,8 @@ export default function AppLayout() {
       <Stack.Screen name="index" />
       <Stack.Screen name="add-category" options={{ presentation: 'modal' }} />
       <Stack.Screen name="edit-category" options={{ presentation: 'modal' }} />
+      <Stack.Screen name="add-transaction" options={{ presentation: 'modal' }} />
+      <Stack.Screen name="edit-transaction" options={{ presentation: 'modal' }} />
     </Stack>
   );
 }

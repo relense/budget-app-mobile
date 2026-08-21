@@ -167,15 +167,34 @@ export default function HomeScreen() {
     }
     if (tab === 'EXPENSES') {
       return expenseTransactions.map((t) => (
-        <ListRow
-          key={t.id}
-          icon={<CategoryIcon name={t.categoryMonth.category.icon} color={colors.text.primary} />}
-          circleColor={t.categoryMonth.category.color}
-          title={t.merchant ?? t.categoryMonth.category.name}
-          subtitle={formatDate(t.date)}
-          amountText={formatCents(t.amountCents)}
-          percentText={`${percentSpent(t.amountCents, t.categoryMonth.monthlyBudgetCents)}%`}
-        />
+        <SwipeableRow
+          key={`${t.id}-${listResetKey}`}
+          testID={`swipe-edit-action-${t.id}`}
+          onEdit={() =>
+            router.push({
+              pathname: '/edit-transaction',
+              params: {
+                transactionId: t.id,
+                categoryMonthId: t.categoryMonth.id,
+                amountCents: String(t.amountCents),
+                date: t.date,
+                merchant: t.merchant ?? '',
+              },
+            })
+          }
+        >
+          <ListRow
+            icon={<CategoryIcon name={t.categoryMonth.category.icon} color={colors.text.primary} />}
+            circleColor={t.categoryMonth.category.color}
+            title={t.merchant ?? t.categoryMonth.category.name}
+            subtitle={formatDate(t.date)}
+            amountText={formatCents(t.amountCents)}
+            // The category's cumulative spend vs. its budget -- not this one transaction's own
+            // amount vs. budget, which could never show over 100% for a category that's only
+            // over budget once several transactions are added up.
+            percentText={`${percentSpent(t.categoryMonth.actualAmountCents, t.categoryMonth.monthlyBudgetCents)}%`}
+          />
+        </SwipeableRow>
       ));
     }
     if (tab === 'RECURRENT') {
@@ -362,6 +381,17 @@ export default function HomeScreen() {
               color={i === 1 ? colors.navigation.activeIcon : colors.navigation.inactiveIcon}
             />
           );
+          if (i === 2) {
+            return (
+              <Pressable
+                key={iconName}
+                testID="add-transaction-button"
+                onPress={() => router.push('/add-transaction')}
+              >
+                {icon}
+              </Pressable>
+            );
+          }
           // Profile screen doesn't exist yet -- temporarily wired to sign out instead of
           // being fully inert, so there's still a way to log out until it's built.
           return i === 4 ? (
