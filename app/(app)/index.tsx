@@ -1,6 +1,6 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import { router } from 'expo-router';
-import { useState } from 'react';
+import { router, useNavigation } from 'expo-router';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -15,6 +15,7 @@ import { useAuth } from '../../src/auth/AuthContext';
 import { AddRow } from '../../src/components/AddRow';
 import { CategoryIcon } from '../../src/components/CategoryIcon';
 import { ListRow } from '../../src/components/ListRow';
+import { SwipeableRow } from '../../src/components/SwipeableRow';
 import {
   mostRecentDate,
   percentSpent,
@@ -67,10 +68,19 @@ export default function HomeScreen() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const { signOut } = useAuth();
+  const navigation = useNavigation();
 
   const [tab, setTab] = useState<Tab>('AVAILABLE');
   const [headerMetric, setHeaderMetric] = useState<HeaderMetric>('AVAILABLE_BUDGETED');
   const [metricMenuOpen, setMetricMenuOpen] = useState(false);
+  // Bumped on every screen focus (e.g. coming back from the edit-category modal) and folded
+  // into each row's key below, so a row left swiped-open resets to closed instantly on remount
+  // instead of via an animated close that could be seen racing the screen transition.
+  const [listResetKey, setListResetKey] = useState(0);
+
+  useEffect(() => {
+    return navigation.addListener('focus', () => setListResetKey((key) => key + 1));
+  }, [navigation]);
 
   const currentMonthQuery = useCurrentMonth();
   const month = currentMonthQuery.data?.month;
@@ -125,15 +135,34 @@ export default function HomeScreen() {
   function renderRows() {
     if (tab === 'AVAILABLE') {
       return (expenseCategoryMonths.data ?? []).map((cm) => (
-        <ListRow
-          key={cm.id}
-          icon={<CategoryIcon name={cm.category.icon} color={colors.text.primary} />}
-          circleColor={cm.category.color}
-          title={cm.category.name}
-          subtitle="Available"
-          amountText={formatCents(cm.monthlyBudgetCents - cm.actualAmountCents)}
-          percentText={`${percentSpent(cm.actualAmountCents, cm.monthlyBudgetCents)}%`}
-        />
+        <SwipeableRow
+          key={`${cm.id}-${listResetKey}`}
+          testID={`swipe-edit-action-${cm.id}`}
+          onEdit={() =>
+            router.push({
+              pathname: '/edit-category',
+              params: {
+                categoryMonthId: cm.id,
+                categoryId: cm.category.id,
+                name: cm.category.name,
+                icon: cm.category.icon,
+                color: cm.category.color,
+                budgetType: cm.category.budgetType ?? '',
+                direction: cm.category.direction,
+                monthlyBudgetCents: String(cm.monthlyBudgetCents),
+              },
+            })
+          }
+        >
+          <ListRow
+            icon={<CategoryIcon name={cm.category.icon} color={colors.text.primary} />}
+            circleColor={cm.category.color}
+            title={cm.category.name}
+            subtitle="Available"
+            amountText={formatCents(cm.monthlyBudgetCents - cm.actualAmountCents)}
+            percentText={`${percentSpent(cm.actualAmountCents, cm.monthlyBudgetCents)}%`}
+          />
+        </SwipeableRow>
       ));
     }
     if (tab === 'EXPENSES') {

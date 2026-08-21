@@ -10,6 +10,7 @@ import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AuthProvider, useAuth } from '../src/auth/AuthContext';
@@ -68,15 +69,19 @@ export default function RootLayout() {
   }
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <ThemeProvider>
-        <AuthProvider>
-          <SafeAreaProvider>
-            <RootNavigator />
-            <StatusBar style="auto" />
-          </SafeAreaProvider>
-        </AuthProvider>
-      </ThemeProvider>
-    </QueryClientProvider>
+    // Required by react-native-gesture-handler (swipe-to-reveal on category rows) -- must wrap
+    // everything that uses a gesture-handler component, so it sits at the very root.
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider>
+          <AuthProvider>
+            <SafeAreaProvider>
+              <RootNavigator />
+              <StatusBar style="auto" />
+            </SafeAreaProvider>
+          </AuthProvider>
+        </ThemeProvider>
+      </QueryClientProvider>
+    </GestureHandlerRootView>
   );
 }
