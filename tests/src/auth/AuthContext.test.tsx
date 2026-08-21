@@ -87,6 +87,18 @@ describe('AuthProvider bootstrap', () => {
     expect(mockedClearStoredTokens).toHaveBeenCalled();
   });
 
+  it('signs out instead of hanging on "loading" when reading stored tokens itself throws', async () => {
+    // Distinct from tokenStorage's own corrupt-JSON handling (tested in tokenStorage.test.ts) --
+    // this covers the outer catch in bootstrap() itself, for a getStoredTokens() call that
+    // rejects outright (e.g. a native keychain/keystore error), not one that resolves with a
+    // bad value.
+    mockedGetStoredTokens.mockRejectedValue(new Error('keychain read failed'));
+    await renderProbe();
+
+    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('signedOut'));
+    expect(console.warn).toHaveBeenCalled();
+  });
+
   it('stays signed in for this session when refresh succeeds but local persistence fails', async () => {
     mockedGetStoredTokens.mockResolvedValue({ accessToken: 'old', refreshToken: 'old-refresh' });
     mockedRefreshSession.mockResolvedValue(newTokens);

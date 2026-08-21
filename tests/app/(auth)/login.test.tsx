@@ -72,4 +72,17 @@ describe('LoginScreen', () => {
     );
     expect(router.push).not.toHaveBeenCalled();
   });
+
+  it('shows a generic error message for a non-OtpRequestError failure', async () => {
+    mockedRequestOtp.mockRejectedValue(new Error('network error'));
+    await renderLogin();
+
+    await fireEvent.changeText(screen.getByPlaceholderText('you@example.com'), 'user@example.com');
+    await fireEvent.press(screen.getByText('Send code'));
+
+    await waitFor(() =>
+      expect(screen.getByText('Something went wrong. Please try again.')).toBeTruthy(),
+    );
+    expect(router.push).not.toHaveBeenCalled();
+  });
 });

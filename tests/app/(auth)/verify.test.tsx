@@ -7,7 +7,7 @@ const testSafeAreaMetrics = {
 };
 
 import { useAuth } from '../../../src/auth/AuthContext';
-import { OtpVerifyError, requestOtp, verifyOtp } from '../../../src/auth/authApi';
+import { OtpRequestError, OtpVerifyError, requestOtp, verifyOtp } from '../../../src/auth/authApi';
 import { ThemeProvider } from '../../../src/theme/ThemeProvider';
 import VerifyScreen from '../../../app/(auth)/verify';
 
@@ -83,6 +83,18 @@ describe('VerifyScreen', () => {
     expect(mockSignIn).not.toHaveBeenCalled();
   });
 
+  it('shows a generic error message for a non-OtpVerifyError failure', async () => {
+    mockedVerifyOtp.mockRejectedValue(new Error('network error'));
+    await renderVerify();
+
+    await fireEvent.changeText(screen.getByDisplayValue(''), 'AB12CD');
+
+    await waitFor(() =>
+      expect(screen.getByText('Something went wrong. Please try again.')).toBeTruthy(),
+    );
+    expect(mockSignIn).not.toHaveBeenCalled();
+  });
+
   it('disables resend during the initial cooldown', async () => {
     await renderVerify();
     expect(screen.getByText('Resend code in 0:30')).toBeTruthy();
@@ -148,6 +160,44 @@ describe('VerifyScreen', () => {
         });
       });
       await waitFor(() => expect(mockSignIn).toHaveBeenCalled());
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('shows a rate-limit message when resend is rate-limited', async () => {
+    jest.useFakeTimers();
+    try {
+      mockedRequestOtp.mockRejectedValue(new OtpRequestError('rate_limited'));
+      await renderVerify();
+
+      await act(async () => {
+        jest.advanceTimersByTime(30_000);
+      });
+      await fireEvent.press(screen.getByText('Resend code'));
+
+      await waitFor(() =>
+        expect(screen.getByText('Too many requests — try again in a few minutes.')).toBeTruthy(),
+      );
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('shows a generic error message when resend fails for another reason', async () => {
+    jest.useFakeTimers();
+    try {
+      mockedRequestOtp.mockRejectedValue(new Error('network error'));
+      await renderVerify();
+
+      await act(async () => {
+        jest.advanceTimersByTime(30_000);
+      });
+      await fireEvent.press(screen.getByText('Resend code'));
+
+      await waitFor(() =>
+        expect(screen.getByText('Something went wrong. Please try again.')).toBeTruthy(),
+      );
     } finally {
       jest.useRealTimers();
     }

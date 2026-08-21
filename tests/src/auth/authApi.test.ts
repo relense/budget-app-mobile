@@ -1,4 +1,10 @@
-import { OtpVerifyError, requestOtp, refreshSession, verifyOtp } from '../../../src/auth/authApi';
+import {
+  OtpVerifyError,
+  logout,
+  requestOtp,
+  refreshSession,
+  verifyOtp,
+} from '../../../src/auth/authApi';
 
 const BASE_URL = 'http://localhost:4400';
 
@@ -111,5 +117,31 @@ describe('refreshSession', () => {
     (globalThis.fetch as jest.Mock).mockResolvedValue({ ok: false, status: 401 });
 
     await expect(refreshSession(BASE_URL, 'stale-token')).rejects.toThrow();
+  });
+});
+
+describe('logout', () => {
+  beforeEach(() => {
+    globalThis.fetch = jest.fn();
+  });
+
+  it('posts the refresh token and resolves on success', async () => {
+    (globalThis.fetch as jest.Mock).mockResolvedValue({ ok: true, status: 204 });
+
+    await logout(BASE_URL, 'refresh-1');
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      `${BASE_URL}/auth/logout`,
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ refreshToken: 'refresh-1' }),
+      }),
+    );
+  });
+
+  it('throws on a non-ok response', async () => {
+    (globalThis.fetch as jest.Mock).mockResolvedValue({ ok: false, status: 500 });
+
+    await expect(logout(BASE_URL, 'refresh-1')).rejects.toThrow();
   });
 });

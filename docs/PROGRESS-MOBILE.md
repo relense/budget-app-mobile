@@ -110,8 +110,11 @@ default.
       splash screen held via `expo-splash-screen` until the bootstrap
       refresh resolves. `deviceLabel` is omitted from `verifyOtp` calls for
       now (optional server-side; would need `expo-device`, a new dependency
-      not yet asked for). 25 tests total (`authApi`, `authReducer`, both
-      screens via RNTL).
+      not yet asked for). 51 tests total across 11 suites (`authApi`,
+      `authReducer`, `tokenStorage`, `AuthContext`, both auth screens, the
+      root layout's route-gating, `Logo`/`SplashView` smoke tests) — went
+      through three `pr-reviewer` rounds plus a `test-auditor` pass before
+      merge; both found and fixed real bugs (see PR #5's commit history).
 - [ ] First screen (real budget/category/transaction UI) — TBD
 
 **Scaffold caveats worth knowing before the next `npm install` in this
