@@ -6,9 +6,9 @@ This repo is **Phase 2** of the project: the mobile app that consumes an already
 
 ## Status
 
-Not started yet. Currently just project docs and Claude Code configuration — no app code. Before any screen work begins, this project requires a design interview (mockups + the source Excel budget structure) rather than guessing layout/copy/behavior from assumptions.
+Expo project scaffolded (TypeScript, Expo Router, ESLint + Prettier, Jest + React Native Testing Library) — no screens yet. Before any screen work begins, this project requires a design interview (mockups + the source Excel budget structure) rather than guessing layout/copy/behavior from assumptions.
 
-## Stack (planned)
+## Stack
 
 - [Expo](https://expo.dev/) (React Native) + TypeScript
 - Expo Router (file-based navigation)
@@ -33,4 +33,10 @@ The backend (Phase 1) is functionally complete and lives in a separate repositor
 
 ## Getting started
 
-Not yet available — project scaffold hasn't been created.
+```
+npm install
+cp .env.example .env   # adjust API_URL if your backend isn't on the default port
+npm start              # then press i / a / w, or scan the QR code in Expo Go
+```
+
+Other scripts: `npm test` (Jest), `npm run lint` (ESLint), `npm run typecheck` (tsc), `npm run format` (Prettier).
