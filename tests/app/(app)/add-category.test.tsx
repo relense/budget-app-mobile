@@ -311,7 +311,7 @@ describe('AddCategoryScreen', () => {
       expect(screen.queryByTestId('category-name-input')).toBeNull();
     });
 
-    it('"Select Existing" opens the category list as an overlay, dismissible by tapping outside', async () => {
+    it('"Select Category" opens the category list as an overlay, dismissible by tapping outside', async () => {
       await renderScreen();
 
       await fireEvent.press(screen.getByTestId('choose-existing-button'));
@@ -376,7 +376,7 @@ describe('AddCategoryScreen', () => {
       expect(mockedRouterBack).not.toHaveBeenCalled();
     });
 
-    it('going back from "Create New" and choosing it again starts with a genuinely blank form', async () => {
+    it('going back from "Create Category" and choosing it again starts with a genuinely blank form', async () => {
       await renderScreen();
 
       await fireEvent.press(screen.getByTestId('choose-new-button'));
@@ -401,13 +401,13 @@ describe('AddCategoryScreen', () => {
 
       expect(screen.getByTestId('choose-existing-button')).toBeTruthy();
       expect(screen.getByTestId('choose-new-button')).toBeTruthy();
-      // Going back and choosing "Create New" should start a genuinely fresh form, not carry
+      // Going back and choosing "Create Category" should start a genuinely fresh form, not carry
       // over the category they'd picked before changing their mind.
       await fireEvent.press(screen.getByTestId('choose-new-button'));
       expect(screen.getByTestId('category-name-input').props.editable).toBe(true);
     });
 
-    it('"Create New" swaps in today\'s full form to create a brand new category', async () => {
+    it('"Create Category" swaps in today\'s full form to create a brand new category', async () => {
       await renderScreen();
 
       await fireEvent.press(screen.getByTestId('choose-new-button'));
@@ -423,7 +423,7 @@ describe('AddCategoryScreen', () => {
       );
     });
 
-    it('"Create New" shows a back button that returns to the choice screen', async () => {
+    it('"Create Category" shows a back button that returns to the choice screen', async () => {
       await renderScreen();
 
       await fireEvent.press(screen.getByTestId('choose-new-button'));

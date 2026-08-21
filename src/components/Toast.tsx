@@ -29,7 +29,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F3C8C8',
     borderRadius: 12,
     paddingVertical: 12,
-    paddingHorizontal: 16,
+    paddingHorizontal: 3,
     alignItems: 'center',
     zIndex: 30,
     // elevation covers Android's shadow; the shadow* props cover iOS -- neither platform

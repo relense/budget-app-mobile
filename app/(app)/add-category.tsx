@@ -209,7 +209,7 @@ export default function AddCategoryScreen() {
               onPress={() => setOverlay('existingList')}
             >
               <Text style={[styles.choiceButtonLabel, { color: colors.text.primary }]}>
-                Select Existing
+                Select Category
               </Text>
             </Pressable>
             <Pressable
@@ -218,7 +218,7 @@ export default function AddCategoryScreen() {
               onPress={() => setCategoryMode('new')}
             >
               <Text style={[styles.choiceButtonLabel, { color: colors.text.primary }]}>
-                Create New
+                Create Category
               </Text>
             </Pressable>
           </View>
