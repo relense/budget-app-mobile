@@ -97,7 +97,30 @@ describe('VerifyScreen', () => {
 
   it('disables resend during the initial cooldown', async () => {
     await renderVerify();
-    expect(screen.getByText('Resend code in 0:30')).toBeTruthy();
+    expect(screen.getByText('Resend code in 30s')).toBeTruthy();
+  });
+
+  it('restarts the countdown after a resend, instead of staying stuck', async () => {
+    jest.useFakeTimers();
+    try {
+      mockedRequestOtp.mockResolvedValue(undefined);
+      await renderVerify();
+
+      await act(async () => {
+        jest.advanceTimersByTime(30_000);
+      });
+      await fireEvent.press(screen.getByText('Resend code'));
+      await waitFor(() => expect(mockedRequestOtp).toHaveBeenCalled());
+
+      expect(screen.getByText('Resend code in 30s')).toBeTruthy();
+
+      await act(async () => {
+        jest.advanceTimersByTime(29_000);
+      });
+      expect(screen.getByText('Resend code in 1s')).toBeTruthy();
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it('clears the error border from the OTP boxes after a successful resend', async () => {

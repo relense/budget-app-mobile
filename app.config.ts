@@ -29,6 +29,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     'expo-router',
     'expo-status-bar',
     'expo-secure-store',
+    'expo-asset',
+    'expo-font',
     // No image yet -- no real app icon/logo exists. Solid mint-green background only; the
     // JS-rendered wordmark (src/components/SplashView.tsx) takes over within a frame or two
     // of the native splash showing, for the duration of the auth bootstrap check.

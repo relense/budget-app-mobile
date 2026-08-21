@@ -30,6 +30,11 @@ export default function VerifyScreen() {
   const [status, setStatus] = useState<'idle' | 'submitting' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [secondsLeft, setSecondsLeft] = useState(RESEND_COOLDOWN_SECONDS);
+  // Bumped on every successful resend so the interval effect below re-runs and starts a fresh
+  // countdown -- otherwise (keying the effect on `[]`) the interval that reaches 0 is gone for
+  // good, and a later `setSecondsLeft(RESEND_COOLDOWN_SECONDS)` has no interval left to tick it
+  // back down, leaving the button permanently stuck showing the reset value.
+  const [cooldownGeneration, setCooldownGeneration] = useState(0);
   const inputRef = useRef<TextInput>(null);
   // Belt-and-suspenders alongside the `status === 'submitting'` check in handleChangeCode --
   // a ref read is synchronous even if two onChangeText events land in the same JS tick, where
@@ -37,7 +42,6 @@ export default function VerifyScreen() {
   const isVerifyingRef = useRef(false);
 
   useEffect(() => {
-    if (secondsLeft <= 0) return;
     const timer = setInterval(() => {
       setSecondsLeft((s) => {
         if (s <= 1) {
@@ -48,9 +52,7 @@ export default function VerifyScreen() {
       });
     }, 1000);
     return () => clearInterval(timer);
-    // Intentionally runs once per mount, not once per tick -- the interval clears itself.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [cooldownGeneration]);
 
   async function handleVerify(fullCode: string) {
     isVerifyingRef.current = true;
@@ -95,6 +97,7 @@ export default function VerifyScreen() {
     try {
       await requestOtp(getApiUrl(), email);
       setSecondsLeft(RESEND_COOLDOWN_SECONDS);
+      setCooldownGeneration((g) => g + 1);
     } catch (err) {
       setStatus('error');
       if (err instanceof OtpRequestError && err.code === 'rate_limited') {
@@ -194,9 +197,7 @@ export default function VerifyScreen() {
               { color: resendDisabled ? colors.segment.inactiveText : colors.segment.activeText },
             ]}
           >
-            {secondsLeft > 0
-              ? `Resend code in 0:${String(secondsLeft).padStart(2, '0')}`
-              : 'Resend code'}
+            {secondsLeft > 0 ? `Resend code in ${secondsLeft}s` : 'Resend code'}
           </Text>
         </Pressable>
       </View>

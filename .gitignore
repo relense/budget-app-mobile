@@ -34,9 +34,9 @@ yarn-error.*
 .env
 .env*.local
 
-# design references with real personal financial data — same treatment as
-# the backend's VISAO ANUAL 2026.xlsx, never committed
+# design references with real personal financial data — never committed
 /mockups
+*.xlsx
 
 # typescript
 *.tsbuildinfo

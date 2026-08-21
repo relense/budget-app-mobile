@@ -64,7 +64,8 @@ export/delete, missing `User` FK retrofit) and GraphQL Code Generator on top.
 
 ## Phase 2 — Mobile app
 
-**Status: scaffold done, no screens yet.** Per `docs/PLAN.md` /
+**Status: scaffold, auth flow, and the Budget Home screen done.** Per
+`docs/PLAN.md` /
 `.claude/CLAUDE.md`: before any screen work, must interview for design
 references (mockups + Excel structure) and grill layout/states/copy/colors/
 edge-cases per screen — never assume or fill gaps with a "reasonable"
@@ -87,8 +88,21 @@ default.
       design reference yet** —
       `theme.ts#resolveTheme` deliberately always returns the light theme
       for now (documented in code), not a real dark palette.
-- [ ] Excel structure (`VISAO ANUAL 2026.xlsx`) reviewed — not done yet,
-      only the mockups have been.
+- [x] Excel structure (`VISAO ANUAL 2026.xlsx`) reviewed — added to the
+      project root, gitignored (real personal financial data, same
+      treatment as `mockups/`). 15 sheets: `Poupanças Tracker` (6 savings
+      funds — Emergência/Casamento/Viajar/Reforma-ETF/Bazating/Casa, each
+      with target/initial-balance/monthly tracking, matching
+      `SavingsFund`), 12 monthly sheets Jan–Dec (recurring bills with
+      name/amount/due-day; category budgets with a Preciso/Quero
+      (Need/Want) type; a Salário section with named income sources;
+      bank balance as `Saldo inicial`/`Saldo bancário agora`), 2
+      supermarket-expense breakdown sheets. Confirmed, not new
+      information — the category names (Compras/Comer Fora/Gasolina/
+      Portagens/Saúde/etc.) match the mockups' English translations
+      (Shopping/Eating Out/Gas/Tolls/Health) 1:1, and the whole structure
+      matches the already-built backend data model exactly (this Excel is
+      literally what the backend's seed script was built from).
 - [x] Expo project scaffold (TypeScript, Expo Router, `graphql-request` +
       `@tanstack/react-query`, ESLint + Prettier, Jest + React Native
       Testing Library) — SDK 57, `npm`, bundle id
@@ -115,7 +129,33 @@ default.
       root layout's route-gating, `Logo`/`SplashView` smoke tests) — went
       through three `pr-reviewer` rounds plus a `test-auditor` pass before
       merge; both found and fixed real bugs (see PR #5's commit history).
-- [ ] First screen (real budget/category/transaction UI) — TBD
+- [x] Budget Home screen (`app/(app)/index.tsx`) — the four-tab
+      Available/Expenses/Recurrent/Income dashboard. No dedicated
+      dashboard-aggregate GraphQL fields exist server-side; all header
+      totals are computed client-side (`src/lib/budgetHomeCalculations.ts`)
+      from data the tabs already fetch. The four tabs are **not** views
+      over one shared query — confirmed against the real schema: Available
+      and Income both use `categoryMonths` (filtered by `direction`),
+      Expenses uses `transactions` (filtered client-side to
+      `direction === 'EXPENSE'`), Recurrent uses `recurringExpenses`. Header
+      shows one of 5 metrics at a time (Available Budgeted / Total Expenses
+      / Total Recurrent / Total Income / Total Balance), switchable via a
+      tap-to-open dropdown. Month picker is deferred — the month label is
+      static text for now. Row taps and the 3 "+ New ..." add-rows
+      (Available/Recurrent/Income; Expenses has none, by design) are all
+      inert stubs — no create/detail flows built yet. Icons use
+      `@expo/vector-icons/MaterialCommunityIcons` behind a semantic-name
+      mapping layer (`src/components/CategoryIcon.tsx`) — `Category.icon`
+      from the backend (e.g. `"cart"`) is deliberately library-agnostic;
+      the mapping to a specific icon library's name lives in exactly one
+      place so the library can be swapped later without touching call
+      sites. Category circle backgrounds use `${category.color}33` (~20%
+      opacity tint) — an original design choice, not mockup-derived, since
+      the backend gives one arbitrary hex per category with no paired
+      "light" variant. Bottom nav is drawn for visual completeness but only
+      the profile icon is wired (to `signOut()`, as a temporary stand-in
+      until a real profile screen exists — see code comment). 77 tests
+      total across 16 suites.
 
 **Scaffold caveats worth knowing before the next `npm install` in this
 repo** (SDK 57 is very new — pin these deliberately, don't let npm grab
@@ -157,3 +197,17 @@ latest):
   checks in the real code silently fail. Use a factory that spreads
   `jest.requireActual(...)` and overrides only the specific functions
   (see `app/(auth)/login.test.tsx`/`verify.test.tsx`).
+- `@expo/vector-icons` requires `expo-font`, which itself requires
+  `expo-asset` — neither is auto-installed as a transitive dependency and
+  both must be added explicitly (`package.json` **and** `app.config.ts`'s
+  `plugins` array). `npx expo-doctor` catches missing entries here.
+- **`renderHook` (from `@testing-library/react-native`) combined with a
+  real `useQuery` (react-query) hangs indefinitely** — confirmed (via
+  `ps aux` showing the process alive at 0% CPU, and file-based synchronous
+  logging bypassing stdout buffering) that the hang happens inside the
+  synchronous `renderHook(...)` call itself, before it even returns. Root
+  cause not fully chased down (would need deep RNTL/react-query internals
+  digging); the pragmatic fix is to never unit-test a query hook in
+  isolation via `renderHook` — only test data-fetching behavior through a
+  full screen `render()` test with the query-hooks module mocked at the
+  module level (see `tests/app/(app)/index.test.tsx`).
