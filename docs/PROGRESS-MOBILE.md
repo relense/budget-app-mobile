@@ -87,8 +87,21 @@ default.
       design reference yet** —
       `theme.ts#resolveTheme` deliberately always returns the light theme
       for now (documented in code), not a real dark palette.
-- [ ] Excel structure (`VISAO ANUAL 2026.xlsx`) reviewed — not done yet,
-      only the mockups have been.
+- [x] Excel structure (`VISAO ANUAL 2026.xlsx`) reviewed — added to the
+      project root, gitignored (real personal financial data, same
+      treatment as `mockups/`). 15 sheets: `Poupanças Tracker` (6 savings
+      funds — Emergência/Casamento/Viajar/Reforma-ETF/Bazating/Casa, each
+      with target/initial-balance/monthly tracking, matching
+      `SavingsFund`), 12 monthly sheets Jan–Dec (recurring bills with
+      name/amount/due-day; category budgets with a Preciso/Quero
+      (Need/Want) type; a Salário section with named income sources;
+      bank balance as `Saldo inicial`/`Saldo bancário agora`), 2
+      supermarket-expense breakdown sheets. Confirmed, not new
+      information — the category names (Compras/Comer Fora/Gasolina/
+      Portagens/Saúde/etc.) match the mockups' English translations
+      (Shopping/Eating Out/Gas/Tolls/Health) 1:1, and the whole structure
+      matches the already-built backend data model exactly (this Excel is
+      literally what the backend's seed script was built from).
 - [x] Expo project scaffold (TypeScript, Expo Router, `graphql-request` +
       `@tanstack/react-query`, ESLint + Prettier, Jest + React Native
       Testing Library) — SDK 57, `npm`, bundle id
