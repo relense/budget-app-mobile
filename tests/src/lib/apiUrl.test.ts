@@ -1,4 +1,4 @@
-import { resolveApiUrl } from './apiUrl';
+import { resolveApiUrl } from '../../../src/lib/apiUrl';
 
 describe('resolveApiUrl', () => {
   it('rewrites localhost to the Android emulator host in dev on Android', () => {

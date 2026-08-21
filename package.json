@@ -8,6 +8,8 @@
     "expo-constants": "~57.0.13",
     "expo-linking": "~57.0.7",
     "expo-router": "~57.0.15",
+    "expo-secure-store": "~57.0.1",
+    "expo-splash-screen": "~57.0.7",
     "expo-status-bar": "~57.0.1",
     "graphql": "^16.14.2",
     "graphql-request": "^7.4.0",
@@ -28,6 +30,7 @@
     "jest-expo": "^57.0.4",
     "prettier": "^3.9.6",
     "react-test-renderer": "^19.2.8",
+    "test-renderer": "^1.2.0",
     "typescript": "~6.0.3"
   },
   "scripts": {
@@ -43,6 +46,9 @@
   },
   "private": true,
   "jest": {
-    "preset": "jest-expo"
+    "preset": "jest-expo",
+    "testMatch": [
+      "<rootDir>/tests/**/*.test.[jt]s?(x)"
+    ]
   }
 }
