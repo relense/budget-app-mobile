@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 const testSafeAreaMetrics = {
@@ -15,10 +15,42 @@ import {
 } from '../../../src/api/budgetHomeQueries';
 import { useAuth } from '../../../src/auth/AuthContext';
 import { ThemeProvider } from '../../../src/theme/ThemeProvider';
+import { router } from 'expo-router';
 import HomeScreen from '../../../app/(app)/index';
 
 jest.mock('../../../src/api/budgetHomeQueries');
 jest.mock('../../../src/auth/AuthContext');
+
+// HomeScreen is rendered directly here, outside a real NavigationContainer, so the
+// context-based `useNavigation` hook has nothing to attach to -- stub it with a no-op listener
+// the same way `router.push` below is stubbed rather than exercised for real.
+const mockedAddListener = jest.fn<() => void, [event: string, callback: () => void]>(
+  () => jest.fn(),
+);
+jest.mock('expo-router', () => ({
+  ...jest.requireActual('expo-router'),
+  useNavigation: () => ({ addListener: mockedAddListener }),
+}));
+
+// SwipeableRow's own drag/gesture behavior is covered directly in its own test file --
+// here we only care that HomeScreen wires it up (testID/onEdit) and remounts it on focus, so
+// it's replaced with a passthrough that preserves that same testID/onPress contract while
+// recording each mount so the focus-triggered remount below is actually observable.
+const mockSwipeableRowMount = jest.fn();
+jest.mock('../../../src/components/SwipeableRow', () => {
+  const ReactActual = jest.requireActual('react');
+  const { Pressable } = jest.requireActual('react-native');
+  return {
+    SwipeableRow: ({ onEdit, testID, children }: any) => {
+      ReactActual.useEffect(() => {
+        mockSwipeableRowMount();
+      }, []);
+      return ReactActual.createElement(Pressable, { testID, onPress: onEdit }, children);
+    },
+  };
+});
+
+const mockedRouterPush = jest.spyOn(router, 'push').mockImplementation(() => {});
 
 const mockedUseCurrentMonth = useCurrentMonth as jest.Mock;
 const mockedUseCategoryMonths = useCategoryMonths as jest.Mock;
@@ -178,6 +210,34 @@ describe('HomeScreen', () => {
     expect(screen.getAllByText('Available')).toHaveLength(3);
   });
 
+  it('navigates to Add Category when "New budget category" is pressed', async () => {
+    await renderHomeScreen();
+
+    await fireEvent.press(screen.getByText('New budget category'));
+
+    expect(mockedRouterPush).toHaveBeenCalledWith('/add-category');
+  });
+
+  it('navigates to Edit Category, with the right params, when a row is swipe-edited', async () => {
+    await renderHomeScreen();
+
+    await fireEvent.press(screen.getByTestId('swipe-edit-action-cm-shopping'));
+
+    expect(mockedRouterPush).toHaveBeenCalledWith({
+      pathname: '/edit-category',
+      params: {
+        categoryMonthId: 'cm-shopping',
+        categoryId: 'c-shopping',
+        name: 'Shopping',
+        icon: 'cart',
+        color: '#4C6EF5',
+        budgetType: 'NEED',
+        direction: 'EXPENSE',
+        monthlyBudgetCents: '70000',
+      },
+    });
+  });
+
   it('switches to the Expenses tab and shows transactions with merchant names', async () => {
     await renderHomeScreen();
 
@@ -276,5 +336,24 @@ describe('HomeScreen', () => {
 
     expect(screen.getByTestId('header-amount-error')).toBeTruthy();
     expect(screen.queryByText('€0.00')).toBeNull();
+  });
+
+  it('remounts the category rows when the screen regains focus, so a swiped-open row resets', async () => {
+    await renderHomeScreen();
+
+    expect(mockedAddListener).toHaveBeenCalledWith('focus', expect.any(Function));
+    const onFocus = mockedAddListener.mock.calls[0][1];
+    const mountsBeforeFocus = mockSwipeableRowMount.mock.calls.length;
+    // Two expense categories (Shopping, Eating Out) are rendered as SwipeableRow on the
+    // Available tab.
+    expect(mountsBeforeFocus).toBe(2);
+
+    await act(async () => {
+      onFocus();
+    });
+
+    // Each row's `key` changes on focus, so React tears down and remounts every row instead of
+    // just re-rendering it -- that's what resets a swiped-open row without an animated close.
+    expect(mockSwipeableRowMount.mock.calls.length).toBe(mountsBeforeFocus * 2);
   });
 });
