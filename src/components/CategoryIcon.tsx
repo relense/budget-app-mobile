@@ -21,7 +21,11 @@ const ICON_MAP: Record<string, IconName> = {
   coffee: 'coffee',
   gift: 'gift',
   moon: 'weather-night',
-  'plus-circle': 'plus-circle',
+  // The backend's semantic name for this is literally "plus-circle" (matches its "Extras"/misc
+  // catch-all category) -- kept as-is here since it's the persisted DB value, not something this
+  // mapping layer can rename. Only the glyph changed: a literal plus-in-a-circle read as an
+  // "add new" affordance inside the icon picker rather than a selectable "misc" option.
+  'plus-circle': 'infinity',
   cpu: 'chip',
   'file-text': 'file-document',
   briefcase: 'briefcase',

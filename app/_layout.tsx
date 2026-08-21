@@ -1,3 +1,10 @@
+import {
+  Fredoka_400Regular,
+  Fredoka_500Medium,
+  Fredoka_600SemiBold,
+  Fredoka_700Bold,
+  useFonts,
+} from '@expo-google-fonts/fredoka';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
@@ -16,13 +23,6 @@ const queryClient = new QueryClient();
 function RootNavigator() {
   const { status } = useAuth();
 
-  useEffect(() => {
-    // Hand off from the native splash (solid mint-green, no image) to SplashView (same
-    // background color, plus the wordmark) as soon as JS has mounted -- not once auth
-    // resolves, so there's no flash of a blank/white screen while bootstrap is in flight.
-    SplashScreen.hideAsync();
-  }, []);
-
   if (status === 'loading') {
     return <SplashView />;
   }
@@ -40,6 +40,33 @@ function RootNavigator() {
 }
 
 export default function RootLayout() {
+  const [fontsLoaded, fontError] = useFonts({
+    Fredoka_400Regular,
+    Fredoka_500Medium,
+    Fredoka_600SemiBold,
+    Fredoka_700Bold,
+  });
+
+  useEffect(() => {
+    // Hand off from the native splash (solid mint-green, no image) to SplashView (same
+    // background color, plus the wordmark) once the custom font is ready -- not merely once JS
+    // has mounted -- so SplashView's own text never flashes in the system font first. Still
+    // doesn't wait for auth bootstrap to resolve; SplashView covers that separately below.
+    // Also proceeds on a font-loading error rather than hiding only on success -- otherwise a
+    // failed font load (bad network on first install, corrupted asset) left the app stuck on
+    // the native splash forever, with no way to proceed and nothing logged.
+    if (fontsLoaded || fontError) {
+      if (fontError) {
+        console.error('Font loading failed, proceeding with fallback fonts', fontError);
+      }
+      SplashScreen.hideAsync();
+    }
+  }, [fontsLoaded, fontError]);
+
+  if (!fontsLoaded && !fontError) {
+    return null;
+  }
+
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>

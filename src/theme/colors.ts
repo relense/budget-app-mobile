@@ -9,7 +9,7 @@ export const lightColors = {
   },
   text: {
     primary: '#1A1A1A',
-    secondary: '#9B9B9B',
+    secondary: '#B5B5B5',
     placeholder: '#C6C6C6',
     onDark: '#FFFFFF',
   },
