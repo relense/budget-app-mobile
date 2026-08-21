@@ -25,23 +25,48 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
+      // Mandatory rotation on refresh means the stored refresh token is single-use -- this
+      // bootstrap call both validates the session and rotates it in one step. A rejected/
+      // expired refresh token is a real "sign out" case; a successful refresh followed by a
+      // local persistence failure is not -- the tokens are valid, just not saved to disk, so
+      // the user stays signed in for this session rather than being wrongly bounced to the
+      // login screen. Keeping these as two separate try blocks is what makes that distinction
+      // possible instead of collapsing both into one generic catch.
+      let rotated;
       try {
-        // Mandatory rotation on refresh means the stored refresh token is single-use --
-        // this bootstrap call both validates the session and rotates it in one step.
-        const rotated = await refreshSession(getApiUrl(), stored.refreshToken);
-        await setStoredTokens(rotated);
-        dispatch({ type: 'BOOTSTRAP_SIGNED_IN', ...rotated });
-      } catch {
+        rotated = await refreshSession(getApiUrl(), stored.refreshToken);
+      } catch (err) {
+        console.warn('Auth bootstrap: refresh token rejected, signing out', err);
         await clearStoredTokens();
         dispatch({ type: 'BOOTSTRAP_SIGNED_OUT' });
+        return;
       }
+
+      try {
+        await setStoredTokens(rotated);
+      } catch (err) {
+        console.warn(
+          'Auth bootstrap: refreshed tokens could not be persisted locally; continuing ' +
+            'signed in for this session only',
+          err,
+        );
+      }
+      dispatch({ type: 'BOOTSTRAP_SIGNED_IN', ...rotated });
     }
 
     bootstrap();
   }, []);
 
   async function signIn(tokens: AuthTokens) {
-    await setStoredTokens(tokens);
+    try {
+      await setStoredTokens(tokens);
+    } catch (err) {
+      console.warn(
+        'Sign-in: tokens could not be persisted locally; continuing signed in for this ' +
+          'session only',
+        err,
+      );
+    }
     dispatch({ type: 'SIGN_IN', ...tokens });
   }
 

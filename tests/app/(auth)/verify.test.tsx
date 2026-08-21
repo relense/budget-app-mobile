@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 const testSafeAreaMetrics = {
@@ -7,7 +7,7 @@ const testSafeAreaMetrics = {
 };
 
 import { useAuth } from '../../../src/auth/AuthContext';
-import { OtpVerifyError, verifyOtp } from '../../../src/auth/authApi';
+import { OtpVerifyError, requestOtp, verifyOtp } from '../../../src/auth/authApi';
 import { ThemeProvider } from '../../../src/theme/ThemeProvider';
 import VerifyScreen from '../../../app/(auth)/verify';
 
@@ -17,10 +17,16 @@ jest.mock('expo-router', () => ({
 jest.mock('../../../src/auth/authApi', () => ({
   ...jest.requireActual('../../../src/auth/authApi'),
   verifyOtp: jest.fn(),
+  requestOtp: jest.fn(),
 }));
 jest.mock('../../../src/auth/AuthContext');
 
 const mockedVerifyOtp = verifyOtp as jest.Mock;
+const mockedRequestOtp = requestOtp as jest.Mock;
+
+function flattenStyle(style: unknown): Record<string, unknown>[] {
+  return ([] as unknown[]).concat(style).filter(Boolean) as Record<string, unknown>[];
+}
 const mockedUseAuth = useAuth as jest.Mock;
 const mockSignIn = jest.fn();
 
@@ -80,5 +86,35 @@ describe('VerifyScreen', () => {
   it('disables resend during the initial cooldown', async () => {
     await renderVerify();
     expect(screen.getByText('Resend code in 0:30')).toBeTruthy();
+  });
+
+  it('clears the error border from the OTP boxes after a successful resend', async () => {
+    jest.useFakeTimers();
+    try {
+      mockedVerifyOtp.mockRejectedValue(new OtpVerifyError('code_expired'));
+      mockedRequestOtp.mockResolvedValue(undefined);
+      await renderVerify();
+
+      await fireEvent.changeText(screen.getByDisplayValue(''), 'AB12CD');
+      await waitFor(() =>
+        expect(screen.getByText('This code has expired. Request a new one.')).toBeTruthy(),
+      );
+      expect(
+        flattenStyle(screen.getByTestId('otp-box-0').props.style).some((s) => s.borderWidth === 1),
+      ).toBe(true);
+
+      await act(async () => {
+        jest.advanceTimersByTime(30_000);
+      });
+      await fireEvent.press(screen.getByText('Resend code'));
+
+      await waitFor(() => expect(mockedRequestOtp).toHaveBeenCalled());
+      expect(screen.queryByText('This code has expired. Request a new one.')).toBeNull();
+      expect(
+        flattenStyle(screen.getByTestId('otp-box-0').props.style).some((s) => s.borderWidth === 1),
+      ).toBe(false);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });

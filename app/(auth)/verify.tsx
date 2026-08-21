@@ -31,14 +31,29 @@ export default function VerifyScreen() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [secondsLeft, setSecondsLeft] = useState(RESEND_COOLDOWN_SECONDS);
   const inputRef = useRef<TextInput>(null);
+  // Belt-and-suspenders alongside the `status === 'submitting'` check in handleChangeCode --
+  // a ref read is synchronous even if two onChangeText events land in the same JS tick, where
+  // two reads of `status` from the render closure could both see the pre-update value.
+  const isVerifyingRef = useRef(false);
 
   useEffect(() => {
     if (secondsLeft <= 0) return;
-    const timer = setInterval(() => setSecondsLeft((s) => s - 1), 1000);
+    const timer = setInterval(() => {
+      setSecondsLeft((s) => {
+        if (s <= 1) {
+          clearInterval(timer);
+          return 0;
+        }
+        return s - 1;
+      });
+    }, 1000);
     return () => clearInterval(timer);
-  }, [secondsLeft]);
+    // Intentionally runs once per mount, not once per tick -- the interval clears itself.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function handleVerify(fullCode: string) {
+    isVerifyingRef.current = true;
     setStatus('submitting');
     setErrorMessage(null);
 
@@ -54,11 +69,13 @@ export default function VerifyScreen() {
         setErrorMessage('Something went wrong. Please try again.');
       }
       inputRef.current?.focus();
+    } finally {
+      isVerifyingRef.current = false;
     }
   }
 
   function handleChangeCode(text: string) {
-    if (status === 'submitting') return;
+    if (isVerifyingRef.current) return;
     const nextCode = text.toUpperCase().slice(0, CODE_LENGTH);
     setCode(nextCode);
     if (nextCode.length === CODE_LENGTH) {
@@ -68,6 +85,7 @@ export default function VerifyScreen() {
 
   async function handleResend() {
     if (secondsLeft > 0) return;
+    setStatus('idle');
     setErrorMessage(null);
     setCode('');
     try {
@@ -88,7 +106,12 @@ export default function VerifyScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background.screen }]}>
-      <View style={[styles.logoWrap, { top: insets.top + 24 }]}>
+      <View
+        style={[
+          styles.logoWrap,
+          { top: insets.top + 24, backgroundColor: colors.background.screen },
+        ]}
+      >
         <Logo />
       </View>
 
@@ -102,6 +125,7 @@ export default function VerifyScreen() {
           {boxes.map((char, i) => (
             <View
               key={i}
+              testID={`otp-box-${i}`}
               style={[
                 styles.box,
                 {
@@ -180,6 +204,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     alignItems: 'center',
+    paddingBottom: 16,
   },
   formSection: {
     flex: 1,

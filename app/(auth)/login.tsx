@@ -106,7 +106,13 @@ export default function LoginScreen() {
       {/* Rendered after (on top of) the ScrollView so it stays visible as a floating header
           instead of the scrolled content painting over it when the keyboard shrinks the
           available space. */}
-      <View style={[styles.logoWrap, { top: insets.top + 24 }]} pointerEvents="none">
+      <View
+        style={[
+          styles.logoWrap,
+          { top: insets.top + 24, backgroundColor: colors.background.screen },
+        ]}
+        pointerEvents="none"
+      >
         <Logo />
       </View>
     </View>
@@ -122,6 +128,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     alignItems: 'center',
+    paddingBottom: 16,
   },
   formSection: {
     flexGrow: 1,

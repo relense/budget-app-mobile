@@ -2,32 +2,29 @@ import * as SecureStore from 'expo-secure-store';
 
 import type { AuthTokens } from './authApi';
 
-const ACCESS_TOKEN_KEY = 'budget_tracker_access_token';
-const REFRESH_TOKEN_KEY = 'budget_tracker_refresh_token';
+// One key holding both tokens as JSON, not two separate keys -- a single SecureStore write
+// can't partially fail the way two independent writes could (e.g. access token written,
+// refresh token write throws, leaving a mismatched pair on disk).
+const TOKENS_KEY = 'budget_tracker_tokens';
 
 export async function getStoredTokens(): Promise<AuthTokens | null> {
-  const [accessToken, refreshToken] = await Promise.all([
-    SecureStore.getItemAsync(ACCESS_TOKEN_KEY),
-    SecureStore.getItemAsync(REFRESH_TOKEN_KEY),
-  ]);
-
-  if (!accessToken || !refreshToken) {
+  const raw = await SecureStore.getItemAsync(TOKENS_KEY);
+  if (!raw) {
     return null;
   }
 
-  return { accessToken, refreshToken };
+  const parsed = JSON.parse(raw) as AuthTokens;
+  if (!parsed.accessToken || !parsed.refreshToken) {
+    return null;
+  }
+
+  return parsed;
 }
 
 export async function setStoredTokens(tokens: AuthTokens): Promise<void> {
-  await Promise.all([
-    SecureStore.setItemAsync(ACCESS_TOKEN_KEY, tokens.accessToken),
-    SecureStore.setItemAsync(REFRESH_TOKEN_KEY, tokens.refreshToken),
-  ]);
+  await SecureStore.setItemAsync(TOKENS_KEY, JSON.stringify(tokens));
 }
 
 export async function clearStoredTokens(): Promise<void> {
-  await Promise.all([
-    SecureStore.deleteItemAsync(ACCESS_TOKEN_KEY),
-    SecureStore.deleteItemAsync(REFRESH_TOKEN_KEY),
-  ]);
+  await SecureStore.deleteItemAsync(TOKENS_KEY);
 }

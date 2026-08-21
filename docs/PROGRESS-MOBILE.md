@@ -81,7 +81,10 @@ default.
       **No auth/login mockup exists** (OTP login is a Phase-1 backend
       design choice, not part of the original Excel-based app design) —
       those screens will be designed conversationally, borrowing this
-      palette. **Dark mode has no design reference yet** —
+      palette — one exception is `colors.identity.badgeBackground`
+      (`#FFCCDB`), a user-specified accent for the auth screens' logo/OTP
+      box styling, not extracted from any mockup. **Dark mode has no
+      design reference yet** —
       `theme.ts#resolveTheme` deliberately always returns the light theme
       for now (documented in code), not a real dark palette.
 - [ ] Excel structure (`VISAO ANUAL 2026.xlsx`) reviewed — not done yet,

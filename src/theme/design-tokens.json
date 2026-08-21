@@ -1,5 +1,5 @@
 {
-  "$note": "Extracted by eye from mockups/*.png (24 screens) on 2026-08-21. Close-enough approximations, not pixel-sampled hex values — refine by hand if exact matches matter. Device-frame chrome (the light-gray canvas the phone screenshots float on) is excluded; only in-app colors are captured.",
+  "$note": "Extracted by eye from mockups/*.png (24 screens) on 2026-08-21. Close-enough approximations, not pixel-sampled hex values — refine by hand if exact matches matter. Device-frame chrome (the light-gray canvas the phone screenshots float on) is excluded; only in-app colors are captured. One runtime color, `identity.badgeBackground` in src/theme/colors.ts, has no entry here deliberately — it's a user-specified accent for the auth screens, not extracted from any mockup, so it doesn't belong in a 'from the mockups' reference file.",
 
   "colors": {
     "background": {

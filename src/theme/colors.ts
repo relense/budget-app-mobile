@@ -1,5 +1,6 @@
-// Extracted from mockups/*.png — see src/theme/design-tokens.json for source notes.
-// Close-enough approximations, refine by hand if exact hex values matter.
+// Mostly extracted from mockups/*.png — see src/theme/design-tokens.json for source notes.
+// Close-enough approximations, refine by hand if exact hex values matter. The `identity`
+// section is the one exception, not mockup-derived — see its own inline comment.
 export const lightColors = {
   background: {
     screen: '#FFFFFF',
