@@ -64,8 +64,8 @@ export/delete, missing `User` FK retrofit) and GraphQL Code Generator on top.
 
 ## Phase 2 — Mobile app
 
-**Status: scaffold, auth flow, Budget Home, and Add Category screens
-done.** Per `docs/PLAN.md` /
+**Status: scaffold, auth flow, Budget Home, Add/Edit Category, and
+Add/Edit Transaction screens done.** Per `docs/PLAN.md` /
 `.claude/CLAUDE.md`: before any screen work, must interview for design
 references (mockups + Excel structure) and grill layout/states/copy/colors/
 edge-cases per screen — never assume or fill gaps with a "reasonable"
@@ -169,8 +169,9 @@ default.
       the choice from either path. Duplicate category names are blocked
       client-side with a toast (`Toast.tsx`, pastel-red, no library).
       Shares `AmountKeypad` (added this pass, `src/components/
-      AmountKeypad.tsx` — flex-sized, no calendar-key slot yet since no
-      consumer needs one) and Fredoka (loaded app-wide in `app/_layout.tsx`
+      AmountKeypad.tsx` — flex-sized; a calendar/date-toggle key was added
+      later, opt-in via `onToggleDateMode`, see the Add/Edit Transaction
+      bullet below) and Fredoka (loaded app-wide in `app/_layout.tsx`
       via `@expo-google-fonts/fredoka`; every `typography.scale` entry sets
       only `fontFamily`, never `fontWeight` alongside it — setting both
       made iOS synthesize extra bold on an already-bold static font file).
@@ -199,6 +200,49 @@ default.
       }
       ```
       145 tests total across 25 suites.
+- [x] Edit Category screen (`app/(app)/edit-category.tsx`) + swipe-to-edit —
+      Available-tab rows are now wrapped in `SwipeableRow`
+      (`src/components/SwipeableRow.tsx`, a swipe-left-to-reveal-Edit
+      `react-native-gesture-handler` row; the action pane translates in
+      step with the drag rather than being statically uncovered). A row is
+      deliberately left open (not explicitly closed) on Edit press — the
+      edit screen covers it, and the caller resets it via a focus-triggered
+      remount (`listResetKey` bumped on `navigation.addListener('focus', …)`,
+      folded into each row's `key`) once the user comes back, since an
+      animated `close()` either direction was visibly racing the screen
+      transition. Edit screen itself: rename/rebudget/delete, mirroring Add
+      Category's identity-row + keypad layout, `useUpdateCategory`/
+      `useUpdateCategoryMonthBudget`/`useRemoveCategoryFromMonth`
+      (`src/api/categoryMutations.ts`) — delete cascades to removing the
+      catalog `Category` too if this was its last active month anywhere
+      (see `SERVICES.md`).
+- [x] Add/Edit Transaction screens (`app/(app)/add-transaction.tsx`,
+      `app/(app)/edit-transaction.tsx`) — the bottom-nav `+` (previously
+      inert) opens Add Transaction: a category pill (defaults to the first
+      active expense category this month, tap to switch via the same
+      `ExistingCategoryPicker` overlay pattern as Add Category), amount
+      keypad, optional merchant/description field, confirm. Expenses-tab
+      rows get the same swipe-to-edit treatment as above, opening Edit
+      Transaction (amount/category/date/merchant all editable, plus
+      Delete). `src/api/transactionMutations.ts` adds
+      `createTransaction`/`updateTransaction`/`deleteTransaction` +
+      hooks, all invalidating `transactions`/`categoryMonths`/`bankBalance`
+      together (a transaction changes all three). **Date entry is
+      day-only, not a full date picker**: a transaction's `categoryMonthId`
+      is always scoped to the current unlocked month (every earlier month
+      is locked), so typing a different month/year would never be valid —
+      the keypad's calendar key (`AmountKeypad`'s new opt-in
+      `onToggleDateMode`/`dateMode` props, unused by Add/Edit Category)
+      only lets you type 1-2 day digits, with month/year fixed and shown
+      for context (e.g. "21 Sep 2026"); `src/lib/dateInput.ts` rejects a
+      second digit that would exceed that specific month's real day count
+      (Feb/leap years included), so an invalid day can't structurally be
+      typed at all — no "invalid date" error state exists. Bug fix that
+      came out of this pass: the Expenses tab's per-row percent was
+      `thisTransaction ÷ budget` instead of the category's cumulative
+      `actualAmountCents ÷ budget` (only visibly wrong once a category has
+      more than one transaction) — `TRANSACTIONS_QUERY` now also fetches
+      `categoryMonth.actualAmountCents`. 241 tests total across 32 suites.
 
 **Scaffold caveats worth knowing before the next `npm install` in this
 repo** (SDK 57 is very new — pin these deliberately, don't let npm grab
