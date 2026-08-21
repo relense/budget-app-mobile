@@ -7,14 +7,20 @@ const testSafeAreaMetrics = {
   insets: { top: 47, left: 0, right: 0, bottom: 34 },
 };
 
-import { useCurrentMonth } from '../../../src/api/budgetHomeQueries';
-import { useCreateCategoryWithBudget } from '../../../src/api/categoryMutations';
+import { useCategoryMonths, useCurrentMonth } from '../../../src/api/budgetHomeQueries';
+import {
+  useAddCategoryToMonth,
+  useCreateCategoryWithBudget,
+} from '../../../src/api/categoryMutations';
+import { useCategories } from '../../../src/api/categoryQueries';
+import { colorForIcon } from '../../../src/lib/categoryIconPalette';
 import { ThemeProvider } from '../../../src/theme/ThemeProvider';
 import { router } from 'expo-router';
 import AddCategoryScreen from '../../../app/(app)/add-category';
 
 jest.mock('../../../src/api/budgetHomeQueries');
 jest.mock('../../../src/api/categoryMutations');
+jest.mock('../../../src/api/categoryQueries');
 jest.mock('expo-router', () => ({
   router: { back: jest.fn(), push: jest.fn() },
 }));
@@ -30,10 +36,27 @@ jest.spyOn(Keyboard, 'addListener').mockImplementation((event, callback) => {
 const mockedKeyboardDismiss = jest.spyOn(Keyboard, 'dismiss').mockImplementation(() => {});
 
 const mockedUseCurrentMonth = useCurrentMonth as jest.Mock;
+const mockedUseCategoryMonths = useCategoryMonths as jest.Mock;
+const mockedUseCategories = useCategories as jest.Mock;
 const mockedUseCreateCategoryWithBudget = useCreateCategoryWithBudget as jest.Mock;
+const mockedUseAddCategoryToMonth = useAddCategoryToMonth as jest.Mock;
 const mockedRouterBack = router.back as jest.Mock;
 
-const mutateAsync = jest.fn();
+const createMutateAsync = jest.fn();
+const addExistingMutateAsync = jest.fn();
+
+// Deliberately not colorForIcon('fuel') -- stands in for a category whose stored color has
+// drifted from the palette (e.g. a legacy value), so tests can assert the pill ignores it.
+const GAS_STUB_COLOR = colorForIcon('utensils');
+
+const gasCategory = {
+  id: 'cat-gas',
+  name: 'Gas',
+  icon: 'fuel',
+  color: GAS_STUB_COLOR,
+  budgetType: 'NEED' as const,
+  direction: 'EXPENSE' as const,
+};
 
 function renderScreen() {
   return render(
@@ -52,15 +75,30 @@ beforeEach(() => {
     isLoading: false,
     isError: false,
   });
-  mutateAsync.mockResolvedValue(undefined);
+  mockedUseCategoryMonths.mockReturnValue({ data: [], isLoading: false, isError: false });
+  mockedUseCategories.mockReturnValue({ data: [], isLoading: false, isError: false });
+  createMutateAsync.mockResolvedValue(undefined);
+  addExistingMutateAsync.mockResolvedValue(undefined);
   mockedUseCreateCategoryWithBudget.mockReturnValue({
-    mutateAsync,
+    mutateAsync: createMutateAsync,
+    isPending: false,
+    isError: false,
+  });
+  mockedUseAddCategoryToMonth.mockReturnValue({
+    mutateAsync: addExistingMutateAsync,
     isPending: false,
     isError: false,
   });
 });
 
 describe('AddCategoryScreen', () => {
+  it('goes straight to the create-new form when no unused categories exist', async () => {
+    await renderScreen();
+
+    expect(screen.getByTestId('category-name-input')).toBeTruthy();
+    expect(screen.queryByTestId('choose-existing-button')).toBeNull();
+  });
+
   it('starts with the confirm key disabled until a name is entered', async () => {
     await renderScreen();
 
@@ -112,10 +150,10 @@ describe('AddCategoryScreen', () => {
     await fireEvent.press(screen.getByTestId('keypad-digit-0'));
     await fireEvent.press(screen.getByTestId('keypad-confirm'));
 
-    expect(mutateAsync).toHaveBeenCalledWith({
+    expect(createMutateAsync).toHaveBeenCalledWith({
       name: 'Groceries',
       icon: 'cart',
-      color: '#D2FFD8',
+      color: colorForIcon('cart'),
       budgetType: 'SAVINGS',
       month: '2026-09',
       monthlyBudgetCents: 5000,
@@ -124,9 +162,9 @@ describe('AddCategoryScreen', () => {
   });
 
   it('shows an error message and does not navigate back when the mutation fails', async () => {
-    mutateAsync.mockRejectedValue(new Error('network error'));
+    createMutateAsync.mockRejectedValue(new Error('network error'));
     mockedUseCreateCategoryWithBudget.mockReturnValue({
-      mutateAsync,
+      mutateAsync: createMutateAsync,
       isPending: false,
       isError: true,
     });
@@ -136,6 +174,39 @@ describe('AddCategoryScreen', () => {
     await fireEvent.press(screen.getByTestId('keypad-confirm'));
 
     expect(screen.getByText('Something went wrong. Please try again.')).toBeTruthy();
+    expect(mockedRouterBack).not.toHaveBeenCalled();
+  });
+
+  it('blocks creating a duplicate-named category and shows a toast instead', async () => {
+    mockedUseCategories.mockReturnValue({
+      data: [gasCategory],
+      isLoading: false,
+      isError: false,
+    });
+    // "Gas" is already active this month too, so no choice screen appears (nothing unused to
+    // offer) -- but the create-new form must still reject a duplicate name.
+    mockedUseCategoryMonths.mockReturnValue({
+      data: [
+        {
+          id: 'cm-gas',
+          month: '2026-09',
+          monthlyBudgetCents: 0,
+          actualAmountCents: 0,
+          recurringCommittedCents: 0,
+          category: gasCategory,
+          transactions: [],
+        },
+      ],
+      isLoading: false,
+      isError: false,
+    });
+    await renderScreen();
+
+    await fireEvent.changeText(screen.getByTestId('category-name-input'), '  gas  ');
+    await fireEvent.press(screen.getByTestId('keypad-confirm'));
+
+    expect(screen.getByText('Category already exists')).toBeTruthy();
+    expect(createMutateAsync).not.toHaveBeenCalled();
     expect(mockedRouterBack).not.toHaveBeenCalled();
   });
 
@@ -158,5 +229,122 @@ describe('AddCategoryScreen', () => {
 
     await fireEvent.press(screen.getByTestId('keypad-digit-7'));
     expect(screen.getByText('€7')).toBeTruthy();
+  });
+
+  describe('with an unused existing category', () => {
+    beforeEach(() => {
+      mockedUseCategories.mockReturnValue({
+        data: [gasCategory],
+        isLoading: false,
+        isError: false,
+      });
+      // Gas is in the catalog but not active this month -- categoryMonths stays empty.
+    });
+
+    it('shows the "select existing vs. create new" choice first, not the form', async () => {
+      await renderScreen();
+
+      expect(screen.getByTestId('choose-existing-button')).toBeTruthy();
+      expect(screen.getByTestId('choose-new-button')).toBeTruthy();
+      expect(screen.queryByTestId('category-name-input')).toBeNull();
+    });
+
+    it('"Select Existing" opens the category list as an overlay, dismissible by tapping outside', async () => {
+      await renderScreen();
+
+      await fireEvent.press(screen.getByTestId('choose-existing-button'));
+      expect(screen.getByText('Gas')).toBeTruthy();
+
+      await fireEvent.press(screen.getByTestId('icon-picker-backdrop'));
+      expect(screen.queryByText('Gas')).toBeNull();
+      expect(screen.getByTestId('choose-existing-button')).toBeTruthy();
+    });
+
+    it('can enter the budget amount before choosing a category, but confirm stays disabled', async () => {
+      await renderScreen();
+
+      await fireEvent.press(screen.getByTestId('keypad-digit-5'));
+      expect(screen.getByText('€5')).toBeTruthy();
+      expect(screen.getByTestId('keypad-confirm').props.accessibilityState.disabled).toBe(true);
+    });
+
+    it('selecting an existing category locks name/budget-type and submits via addCategoryToMonth only', async () => {
+      await renderScreen();
+
+      await fireEvent.press(screen.getByTestId('choose-existing-button'));
+      await fireEvent.press(screen.getByTestId('existing-category-cat-gas'));
+
+      expect(screen.getByDisplayValue('Gas').props.editable).toBe(false);
+      expect(screen.getByTestId('keypad-confirm').props.accessibilityState.disabled).toBe(false);
+      // gasCategory.color (GAS_STUB_COLOR) is a deliberately mismatched stub -- the pill must
+      // use colorForIcon('fuel') instead of that raw stored value, matching the
+      // existing-category list it was just picked from.
+      expect(GAS_STUB_COLOR).not.toBe(colorForIcon('fuel'));
+      const pillStyle = ([] as unknown[])
+        .concat(screen.getByTestId('icon-pill').props.style)
+        .filter(Boolean) as Record<string, unknown>[];
+      expect(pillStyle.some((s) => s.backgroundColor === colorForIcon('fuel'))).toBe(true);
+
+      await fireEvent.press(screen.getByTestId('keypad-digit-5'));
+      await fireEvent.press(screen.getByTestId('keypad-confirm'));
+
+      expect(addExistingMutateAsync).toHaveBeenCalledWith({
+        categoryId: 'cat-gas',
+        month: '2026-09',
+        monthlyBudgetCents: 500,
+      });
+      expect(createMutateAsync).not.toHaveBeenCalled();
+      expect(mockedRouterBack).toHaveBeenCalled();
+    });
+
+    it('selecting an existing category also shows a back button, letting the user reconsider', async () => {
+      await renderScreen();
+
+      await fireEvent.press(screen.getByTestId('choose-existing-button'));
+      await fireEvent.press(screen.getByTestId('existing-category-cat-gas'));
+
+      await fireEvent.press(screen.getByTestId('back-to-choice'));
+
+      expect(screen.getByTestId('choose-existing-button')).toBeTruthy();
+      expect(screen.getByTestId('choose-new-button')).toBeTruthy();
+      // Going back and choosing "Create New" should start a genuinely fresh form, not carry
+      // over the category they'd picked before changing their mind.
+      await fireEvent.press(screen.getByTestId('choose-new-button'));
+      expect(screen.getByTestId('category-name-input').props.editable).toBe(true);
+    });
+
+    it('"Create New" swaps in today\'s full form to create a brand new category', async () => {
+      await renderScreen();
+
+      await fireEvent.press(screen.getByTestId('choose-new-button'));
+      expect(screen.queryByTestId('choose-existing-button')).toBeNull();
+
+      await fireEvent.press(screen.getByTestId('icon-pill'));
+      await fireEvent.press(screen.getByTestId('icon-option-heart'));
+      await fireEvent.changeText(screen.getByTestId('category-name-input'), 'Health');
+      await fireEvent.press(screen.getByTestId('keypad-confirm'));
+
+      expect(createMutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({ name: 'Health', icon: 'heart' }),
+      );
+    });
+
+    it('"Create New" shows a back button that returns to the choice screen', async () => {
+      await renderScreen();
+
+      await fireEvent.press(screen.getByTestId('choose-new-button'));
+      expect(screen.getByTestId('back-to-choice')).toBeTruthy();
+
+      await fireEvent.press(screen.getByTestId('back-to-choice'));
+
+      expect(screen.getByTestId('choose-existing-button')).toBeTruthy();
+      expect(screen.getByTestId('choose-new-button')).toBeTruthy();
+    });
+  });
+
+  it('does not show a back button when there was never a choice to make', async () => {
+    await renderScreen();
+
+    expect(screen.queryByTestId('back-to-choice')).toBeNull();
   });
 });

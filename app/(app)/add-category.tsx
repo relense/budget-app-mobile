@@ -1,15 +1,21 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Keyboard, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Keyboard, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { useCreateCategoryWithBudget } from '../../src/api/categoryMutations';
-import type { BudgetType } from '../../src/api/types';
-import { useCurrentMonth } from '../../src/api/budgetHomeQueries';
+import { useCategoryMonths, useCurrentMonth } from '../../src/api/budgetHomeQueries';
+import {
+  useAddCategoryToMonth,
+  useCreateCategoryWithBudget,
+} from '../../src/api/categoryMutations';
+import { useCategories } from '../../src/api/categoryQueries';
+import type { BudgetType, Category } from '../../src/api/types';
 import { AmountKeypad } from '../../src/components/AmountKeypad';
 import { CategoryIcon } from '../../src/components/CategoryIcon';
+import { ExistingCategoryPicker } from '../../src/components/ExistingCategoryPicker';
 import { IconPicker } from '../../src/components/IconPicker';
+import { Toast } from '../../src/components/Toast';
 import {
   amountTextToCents,
   appendDecimalPoint,
@@ -18,6 +24,10 @@ import {
 } from '../../src/lib/amountInput';
 import { colorForIcon } from '../../src/lib/categoryIconPalette';
 import { useTheme } from '../../src/theme/ThemeProvider';
+import {
+  filterUnusedExpenseCategories,
+  isDuplicateCategoryName,
+} from '../../src/lib/unusedCategories';
 
 const BUDGET_TYPES: { key: BudgetType; label: string }[] = [
   { key: 'NEED', label: 'Need' },
@@ -25,18 +35,30 @@ const BUDGET_TYPES: { key: BudgetType; label: string }[] = [
   { key: 'SAVINGS', label: 'Savings' },
 ];
 
+type CategoryMode = 'undecided' | 'new' | 'existing';
+type Overlay = 'none' | 'icons' | 'existingList';
+
+const TOAST_DURATION_MS = 2500;
+
 export default function AddCategoryScreen() {
   const { colors, typography } = useTheme();
   const insets = useSafeAreaInsets();
   const { data: currentMonth } = useCurrentMonth();
+  const month = currentMonth?.month;
+  const categoriesQuery = useCategories();
+  const expenseCategoryMonths = useCategoryMonths(month, 'EXPENSE');
   const createCategory = useCreateCategoryWithBudget();
+  const addExisting = useAddCategoryToMonth();
 
   const [name, setName] = useState('');
   const [icon, setIcon] = useState('cart');
   const [budgetType, setBudgetType] = useState<BudgetType>('NEED');
   const [amountText, setAmountText] = useState('');
-  const [iconPickerOpen, setIconPickerOpen] = useState(false);
+  const [overlay, setOverlay] = useState<Overlay>('none');
+  const [categoryMode, setCategoryMode] = useState<CategoryMode>('undecided');
+  const [selectedExisting, setSelectedExisting] = useState<Category | null>(null);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   useEffect(() => {
     const showSub = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
@@ -47,19 +69,74 @@ export default function AddCategoryScreen() {
     };
   }, []);
 
-  const color = colorForIcon(icon);
-  const canSubmit = name.trim().length > 0 && !!currentMonth?.month && !createCategory.isPending;
+  useEffect(() => {
+    if (!toastMessage) return;
+    const timer = setTimeout(() => setToastMessage(null), TOAST_DURATION_MS);
+    return () => clearTimeout(timer);
+  }, [toastMessage]);
+
+  const unusedCategories = filterUnusedExpenseCategories(
+    categoriesQuery.data ?? [],
+    expenseCategoryMonths.data ?? [],
+  );
+  // If there's nothing to choose from, skip the choice entirely -- behaves exactly as it did
+  // before this feature existed. Otherwise wait for the user to pick a path explicitly.
+  const resolvedMode: CategoryMode =
+    categoryMode !== 'undecided' ? categoryMode : unusedCategories.length > 0 ? 'undecided' : 'new';
+
+  const isExisting = resolvedMode === 'existing' && !!selectedExisting;
+  const displayIcon = isExisting ? selectedExisting.icon : icon;
+  // Always derived from the icon, never the category's own stored color -- an existing
+  // catalog entry can carry an old/inconsistent hex, and this pill should match what was just
+  // shown for it in the existing-category list (which also uses colorForIcon).
+  const displayColor = colorForIcon(displayIcon);
+  const displayName = isExisting ? selectedExisting.name : name;
+  const displayBudgetType = isExisting ? selectedExisting.budgetType : budgetType;
+
+  const isPending = createCategory.isPending || addExisting.isPending;
+  const isError = createCategory.isError || addExisting.isError;
+  // Disabled until the user has picked a category one way or another -- the budget amount
+  // itself can always be typed in the meantime, only confirming is gated.
+  const canSubmit =
+    !!month &&
+    !isPending &&
+    (isExisting ? true : resolvedMode === 'new' ? name.trim().length > 0 : false);
+
+  function handleSelectExisting(category: Category) {
+    setSelectedExisting(category);
+    setCategoryMode('existing');
+    setOverlay('none');
+  }
 
   async function handleConfirm() {
-    if (!canSubmit || !currentMonth) return;
+    if (!canSubmit || !month) return;
+
+    if (isExisting) {
+      try {
+        await addExisting.mutateAsync({
+          categoryId: selectedExisting.id,
+          month,
+          monthlyBudgetCents: amountTextToCents(amountText),
+        });
+        router.back();
+      } catch {
+        // addExisting.isError drives the inline error message below.
+      }
+      return;
+    }
+
+    if (isDuplicateCategoryName(categoriesQuery.data ?? [], name)) {
+      setToastMessage('Category already exists');
+      return;
+    }
 
     try {
       await createCategory.mutateAsync({
         name: name.trim(),
         icon,
-        color,
+        color: colorForIcon(icon),
         budgetType,
-        month: currentMonth.month,
+        month,
         monthlyBudgetCents: amountTextToCents(amountText),
       });
       router.back();
@@ -75,28 +152,67 @@ export default function AddCategoryScreen() {
       </View>
 
       <View style={[styles.content, { paddingBottom: insets.bottom + 16 }]}>
-        <View style={styles.identityRow}>
-          <Pressable
-            testID="icon-pill"
-            style={[styles.iconPill, { backgroundColor: color }]}
-            onPress={() => setIconPickerOpen((open) => !open)}
-          >
-            <CategoryIcon name={icon} color={colors.text.primary} />
-            <MaterialCommunityIcons
-              name={iconPickerOpen ? 'chevron-up' : 'chevron-down'}
-              size={16}
-              color={colors.text.primary}
+        {resolvedMode === 'undecided' ? (
+          <View style={styles.identityRow}>
+            <Pressable
+              testID="choose-existing-button"
+              style={[styles.choiceButton, { backgroundColor: colors.category.green.background }]}
+              onPress={() => setOverlay('existingList')}
+            >
+              <Text style={[styles.choiceButtonLabel, { color: colors.text.primary }]}>
+                Select Existing
+              </Text>
+            </Pressable>
+            <Pressable
+              testID="choose-new-button"
+              style={[styles.choiceButton, { backgroundColor: colors.pill.textInputBackground }]}
+              onPress={() => setCategoryMode('new')}
+            >
+              <Text style={[styles.choiceButtonLabel, { color: colors.text.primary }]}>
+                Create New
+              </Text>
+            </Pressable>
+          </View>
+        ) : (
+          <View style={styles.identityRow}>
+            {(resolvedMode === 'new' || isExisting) && unusedCategories.length > 0 ? (
+              <Pressable
+                testID="back-to-choice"
+                style={styles.backButton}
+                onPress={() => {
+                  setCategoryMode('undecided');
+                  setSelectedExisting(null);
+                }}
+              >
+                <MaterialCommunityIcons name="chevron-left" size={22} color={colors.text.primary} />
+              </Pressable>
+            ) : null}
+            <Pressable
+              testID="icon-pill"
+              style={[styles.iconPill, { backgroundColor: displayColor }]}
+              disabled={isExisting}
+              onPress={() => setOverlay((current) => (current === 'icons' ? 'none' : 'icons'))}
+            >
+              <CategoryIcon name={displayIcon} color={colors.text.primary} />
+              {isExisting ? null : (
+                <MaterialCommunityIcons
+                  name={overlay === 'icons' ? 'chevron-up' : 'chevron-down'}
+                  size={16}
+                  color={colors.text.primary}
+                />
+              )}
+            </Pressable>
+            <TextInput
+              testID="category-name-input"
+              style={[styles.nameInput, { backgroundColor: colors.pill.textInputBackground }]}
+              placeholder="Category name"
+              placeholderTextColor={colors.text.secondary}
+              value={displayName}
+              editable={!isExisting}
+              onChangeText={setName}
             />
-          </Pressable>
-          <TextInput
-            testID="category-name-input"
-            style={[styles.nameInput, { backgroundColor: colors.pill.textInputBackground }]}
-            placeholder="Category name"
-            placeholderTextColor={colors.text.secondary}
-            value={name}
-            onChangeText={setName}
-          />
-        </View>
+          </View>
+        )}
 
         <View style={[styles.budgetTypeRow, { backgroundColor: colors.segment.track }]}>
           {BUDGET_TYPES.map(({ key, label }) => (
@@ -104,16 +220,18 @@ export default function AddCategoryScreen() {
               key={key}
               style={[
                 styles.budgetTypeButton,
-                budgetType === key && { backgroundColor: colors.segment.active },
+                displayBudgetType === key && { backgroundColor: colors.segment.active },
               ]}
-              onPress={() => setBudgetType(key)}
+              onPress={isExisting ? undefined : () => setBudgetType(key)}
             >
               <Text
                 style={[
                   typography.scale.segmentLabel,
                   {
                     color:
-                      budgetType === key ? colors.segment.activeText : colors.segment.inactiveText,
+                      displayBudgetType === key
+                        ? colors.segment.activeText
+                        : colors.segment.inactiveText,
                   },
                 ]}
               >
@@ -139,7 +257,7 @@ export default function AddCategoryScreen() {
           </Text>
         </Text>
 
-        {createCategory.isError ? (
+        {isError ? (
           <Text style={[styles.errorText, { color: colors.button.deleteBackground }]}>
             Something went wrong. Please try again.
           </Text>
@@ -156,30 +274,38 @@ export default function AddCategoryScreen() {
         </View>
       </View>
 
-      {iconPickerOpen ? (
+      {overlay !== 'none' ? (
         <>
           {/* Full-screen backdrop, sibling of `content` so it covers the whole screen -- tapping
               anywhere outside the picker closes it, same pattern as the Home screen's header
-              metric menu. Overlays on top instead of pushing the rest of the form down, and
-              closes on either an outside tap or picking an icon (see IconPicker's onSelect). */}
+              metric menu. Overlays on top instead of pushing the rest of the form down. */}
           <Pressable
             testID="icon-picker-backdrop"
-            style={[StyleSheet.absoluteFill, styles.iconPickerBackdrop]}
-            onPress={() => setIconPickerOpen(false)}
+            style={[StyleSheet.absoluteFill, styles.overlayBackdrop]}
+            onPress={() => setOverlay('none')}
           />
           <View
             style={[
-              styles.iconPickerOverlay,
+              styles.overlayCard,
               { backgroundColor: colors.background.screen, borderColor: colors.segment.track },
             ]}
           >
-            <IconPicker
-              selectedIcon={icon}
-              onSelect={(selected) => {
-                setIcon(selected);
-                setIconPickerOpen(false);
-              }}
-            />
+            {overlay === 'existingList' ? (
+              <ScrollView style={styles.existingListScroll}>
+                <ExistingCategoryPicker
+                  categories={unusedCategories}
+                  onSelectExisting={handleSelectExisting}
+                />
+              </ScrollView>
+            ) : (
+              <IconPicker
+                selectedIcon={icon}
+                onSelect={(selected) => {
+                  setIcon(selected);
+                  setOverlay('none');
+                }}
+              />
+            )}
           </View>
         </>
       ) : null}
@@ -196,6 +322,8 @@ export default function AddCategoryScreen() {
           onPress={() => Keyboard.dismiss()}
         />
       ) : null}
+
+      <Toast message={toastMessage} />
     </View>
   );
 }
@@ -225,6 +353,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
   },
+  choiceButton: {
+    flex: 1,
+    height: 48,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  choiceButtonLabel: {
+    fontSize: 15,
+    fontFamily: 'Fredoka_400Regular',
+  },
+  backButton: {
+    width: 20,
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   iconPill: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -241,10 +386,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     fontSize: 16,
   },
-  iconPickerBackdrop: {
+  overlayBackdrop: {
     zIndex: 9,
   },
-  iconPickerOverlay: {
+  overlayCard: {
     position: 'absolute',
     top: 74,
     left: 24,
@@ -254,6 +399,9 @@ const styles = StyleSheet.create({
     padding: 8,
     zIndex: 10,
     elevation: 4,
+  },
+  existingListScroll: {
+    maxHeight: 260,
   },
   budgetTypeRow: {
     flexDirection: 'row',
