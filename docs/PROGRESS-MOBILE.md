@@ -64,13 +64,33 @@ export/delete, missing `User` FK retrofit) and GraphQL Code Generator on top.
 
 ## Phase 2 — Mobile app
 
-**Status: not started.** Per `docs/PLAN.md` / `.claude/CLAUDE.md`: before
-any screen work, must interview for design references (mockups + Excel
-structure) and grill layout/states/copy/colors/edge-cases per screen —
-never assume or fill gaps with a "reasonable" default.
+**Status: scaffold done, no screens yet.** Per `docs/PLAN.md` /
+`.claude/CLAUDE.md`: before any screen work, must interview for design
+references (mockups + Excel structure) and grill layout/states/copy/colors/
+edge-cases per screen — never assume or fill gaps with a "reasonable"
+default.
 
 - [ ] Design references reviewed (mockups + Excel structure)
-- [ ] Expo project scaffold (TypeScript, Expo Router, `graphql-request` +
-      `@tanstack/react-query`, Jest + React Native Testing Library)
+- [x] Expo project scaffold (TypeScript, Expo Router, `graphql-request` +
+      `@tanstack/react-query`, ESLint + Prettier, Jest + React Native
+      Testing Library) — SDK 57, `npm`, bundle id
+      `com.relense.budgettracker`. `app.config.ts` reads `API_URL` from
+      `.env` (via `expo-constants`); `src/lib/apiUrl.ts` handles the
+      Android-emulator `localhost` → `10.0.2.2` rewrite in dev.
 - [ ] Auth flow (OTP request/verify screens, token storage, silent refresh)
 - [ ] First screen — TBD, pending design interview
+
+**Scaffold caveats worth knowing before the next `npm install` in this
+repo** (SDK 57 is very new — pin these deliberately, don't let npm grab
+latest):
+- `jest` must stay on `^29.x` — `jest-expo@57.0.4` depends on
+  `@jest/globals@^29.2.1` internally; `jest@30` breaks the mocker
+  (`clearMocksOnScope` mismatch).
+- `@react-native/jest-preset` must stay on `^0.86.2` (matching
+  `react-native`'s own version) — a newer version's `setup-env.js` doesn't
+  match this RN version's source layout.
+- `.npmrc` sets `legacy-peer-deps=true` — `expo-router@57.0.15`'s bundled
+  `@expo/ui` (web-only Radix/vaul components, unused on native) pins
+  `react-dom@^19.2.8` against this SDK's own `react-dom@19.2.3`, an
+  upstream packaging bug as of this SDK release. Safe to remove once a
+  patched `expo-router`/`@expo/ui` ships.
