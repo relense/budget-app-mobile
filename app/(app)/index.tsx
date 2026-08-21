@@ -71,8 +71,8 @@ export default function HomeScreen() {
   const [headerMetric, setHeaderMetric] = useState<HeaderMetric>('AVAILABLE_BUDGETED');
   const [metricMenuOpen, setMetricMenuOpen] = useState(false);
 
-  const { data: currentMonth } = useCurrentMonth();
-  const month = currentMonth?.month;
+  const currentMonthQuery = useCurrentMonth();
+  const month = currentMonthQuery.data?.month;
 
   const expenseCategoryMonths = useCategoryMonths(month, 'EXPENSE');
   const incomeCategoryMonths = useCategoryMonths(month, 'INCOME');
@@ -100,6 +100,17 @@ export default function HomeScreen() {
         return bankBalance.data?.amountCents ?? 0;
     }
   })();
+
+  // Whichever query backs the currently-selected header metric -- used so the header shows a
+  // spinner/error state instead of a real-looking "€0.00" while that data hasn't loaded yet.
+  const headerQuery =
+    headerMetric === 'TOTAL_RECURRENT'
+      ? recurringExpenses
+      : headerMetric === 'TOTAL_INCOME'
+        ? incomeCategoryMonths
+        : headerMetric === 'TOTAL_BALANCE'
+          ? bankBalance
+          : expenseCategoryMonths;
 
   const activeQuery =
     tab === 'AVAILABLE'
@@ -182,12 +193,55 @@ export default function HomeScreen() {
     });
   }
 
+  // Every tab body query is gated on `month` being known (`enabled: !!month` in
+  // budgetHomeQueries.ts), so a disabled-and-never-fetched query reports isLoading: false /
+  // isError: false (react-query v5 semantics) -- without this explicit check, a slow or failed
+  // currentMonth fetch left the whole dashboard silently showing an empty state forever, with
+  // no spinner and no error message.
+  if (currentMonthQuery.isLoading) {
+    return (
+      <View
+        testID="home-loading"
+        style={[styles.container, styles.centered, { backgroundColor: colors.background.screen }]}
+      >
+        <ActivityIndicator color={colors.text.primary} />
+      </View>
+    );
+  }
+  if (currentMonthQuery.isError) {
+    return (
+      <View
+        testID="home-error"
+        style={[styles.container, styles.centered, { backgroundColor: colors.background.screen }]}
+      >
+        <Text style={[styles.errorText, { color: colors.button.deleteBackground }]}>
+          Something went wrong loading this. Please try again.
+        </Text>
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background.screen }]}>
       <View style={{ paddingTop: insets.top + 16 }}>
-        <Text style={[styles.headerAmount, { color: colors.text.primary }]}>
-          {formatCents(headerAmountCents)}
-        </Text>
+        {headerQuery.isLoading ? (
+          <ActivityIndicator
+            testID="header-amount-spinner"
+            style={styles.headerSpinner}
+            color={colors.text.primary}
+          />
+        ) : headerQuery.isError ? (
+          <Text
+            testID="header-amount-error"
+            style={[styles.headerAmount, { color: colors.button.deleteBackground }]}
+          >
+            —
+          </Text>
+        ) : (
+          <Text style={[styles.headerAmount, { color: colors.text.primary }]}>
+            {formatCents(headerAmountCents)}
+          </Text>
+        )}
         <Pressable style={styles.headerLabelRow} onPress={() => setMetricMenuOpen((open) => !open)}>
           <Text style={[styles.headerLabel, { color: colors.text.secondary }]}>
             {HEADER_METRIC_LABELS[headerMetric]}
@@ -291,10 +345,17 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  centered: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   headerAmount: {
     fontSize: 32,
     fontWeight: '700',
     textAlign: 'center',
+  },
+  headerSpinner: {
+    marginVertical: 6,
   },
   headerLabelRow: {
     flexDirection: 'row',

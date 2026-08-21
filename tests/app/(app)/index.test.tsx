@@ -225,4 +225,44 @@ describe('HomeScreen', () => {
 
     expect(mockSignOut).toHaveBeenCalled();
   });
+
+  it('shows a full-screen spinner while the current month is loading, not an empty dashboard', async () => {
+    mockedUseCurrentMonth.mockReturnValue({ ...idle, isLoading: true });
+    await renderHomeScreen();
+
+    expect(screen.getByTestId('home-loading')).toBeTruthy();
+    expect(screen.queryByText('Available Budgeted')).toBeNull();
+    expect(screen.queryByText('New budget category')).toBeNull();
+  });
+
+  it('shows a full-screen error when the current month fails to load, not an empty dashboard', async () => {
+    mockedUseCurrentMonth.mockReturnValue({ ...idle, isError: true });
+    await renderHomeScreen();
+
+    expect(screen.getByTestId('home-error')).toBeTruthy();
+    expect(screen.queryByText('Available Budgeted')).toBeNull();
+  });
+
+  it('shows a spinner in place of the header amount while its backing query is loading', async () => {
+    mockedUseCategoryMonths.mockImplementation((_month: string, direction: string) =>
+      direction === 'EXPENSE'
+        ? { data: undefined, isLoading: true, isError: false }
+        : { ...idle, data: incomeCategoryMonths },
+    );
+    await renderHomeScreen();
+
+    expect(screen.getByTestId('header-amount-spinner')).toBeTruthy();
+    expect(screen.queryByText('€655.80')).toBeNull();
+  });
+
+  it('shows an error placeholder in the header instead of a misleading €0.00', async () => {
+    mockedUseBankBalance.mockReturnValue({ data: undefined, isLoading: false, isError: true });
+    await renderHomeScreen();
+
+    await fireEvent.press(screen.getByText('Available Budgeted'));
+    await fireEvent.press(screen.getByText('Total Balance'));
+
+    expect(screen.getByTestId('header-amount-error')).toBeTruthy();
+    expect(screen.queryByText('€0.00')).toBeNull();
+  });
 });
