@@ -64,8 +64,8 @@ export/delete, missing `User` FK retrofit) and GraphQL Code Generator on top.
 
 ## Phase 2 — Mobile app
 
-**Status: scaffold, auth flow, and the Budget Home screen done.** Per
-`docs/PLAN.md` /
+**Status: scaffold, auth flow, Budget Home, and Add Category screens
+done.** Per `docs/PLAN.md` /
 `.claude/CLAUDE.md`: before any screen work, must interview for design
 references (mockups + Excel structure) and grill layout/states/copy/colors/
 edge-cases per screen — never assume or fill gaps with a "reasonable"
@@ -149,13 +149,56 @@ default.
       from the backend (e.g. `"cart"`) is deliberately library-agnostic;
       the mapping to a specific icon library's name lives in exactly one
       place so the library can be swapped later without touching call
-      sites. Category circle backgrounds use `${category.color}33` (~20%
-      opacity tint) — an original design choice, not mockup-derived, since
-      the backend gives one arbitrary hex per category with no paired
-      "light" variant. Bottom nav is drawn for visual completeness but only
+      sites. Category circle backgrounds use `category.color` directly and
+      icon glyphs render plain black — **superseded from the original
+      `${category.color}33` opacity-tint design** once the Add Category
+      screen (below) introduced a fixed icon→color palette; see that
+      bullet for why. Bottom nav is drawn for visual completeness but only
       the profile icon is wired (to `signOut()`, as a temporary stand-in
-      until a real profile screen exists — see code comment). 77 tests
-      total across 16 suites.
+      until a real profile screen exists — see code comment).
+- [x] Add Category screen (`app/(app)/add-category.tsx`) — modal reached
+      from the Home screen's "New budget category" row. First choice (only
+      shown if the catalog has a category not yet active this month, via
+      `filterUnusedExpenseCategories`): "Select Existing" vs. "Create New"
+      buttons in place of the name/icon row; picking existing opens a
+      scrollable catalog list (`ExistingCategoryPicker`) and only the
+      budget amount stays enterable (name/icon/budget-type become
+      read-only, calling `addCategoryToMonth` only — no `createCategory`);
+      picking new reveals the full form (icon picker, name, Need/Want/
+      Savings, calls `createCategoryWithBudget`). A back arrow returns to
+      the choice from either path. Duplicate category names are blocked
+      client-side with a toast (`Toast.tsx`, pastel-red, no library).
+      Shares `AmountKeypad` (added this pass, `src/components/
+      AmountKeypad.tsx` — flex-sized, no calendar-key slot yet since no
+      consumer needs one) and Fredoka (loaded app-wide in `app/_layout.tsx`
+      via `@expo-google-fonts/fredoka`; every `typography.scale` entry sets
+      only `fontFamily`, never `fontWeight` alongside it — setting both
+      made iOS synthesize extra bold on an already-bold static font file).
+      **Icon colors are a fixed, hand-supplied 16-entry palette**
+      (`src/lib/categoryIconPalette.ts`'s `EXPENSE_ICON_PALETTE`), one
+      distinct hex per icon, deliberately **not** the category's own
+      stored `color` (which can be an old/inconsistent value) — every
+      render on this screen and in `ExistingCategoryPicker` derives color
+      from the icon via `colorForIcon()`, and icon glyphs are always plain
+      black rather than tinted. This is why Budget Home's row rendering
+      (above) changed to match. **The backend doesn't know about this
+      palette yet** — the exact icon→color JSON below was handed to a
+      separate agent to update `defaultCategories.ts`/`prisma/seed.ts` so
+      the DB's stored `color` agrees; once that lands, this file's
+      client-side override could in principle be removed, but there's no
+      requirement to do so (deriving from the icon is also just simpler
+      than trusting a stored value to stay in sync):
+      ```json
+      {
+        "cart": "#CEF3C8", "utensils": "#F3D9C8", "fuel": "#F3E8C8",
+        "road": "#C8D3F3", "heart": "#F3C8C8", "star": "#EEF3C8",
+        "book": "#C8E3F3", "shirt": "#DEC8F3", "coffee": "#F3C8D9",
+        "gift": "#EEC8F3", "moon": "#CEC8F3", "plus-circle": "#C8F3D3",
+        "cpu": "#C8F3F3", "file-text": "#C8F3E3", "car": "#DEF3C8",
+        "gamepad": "#F3C8E9"
+      }
+      ```
+      139 tests total across 25 suites.
 
 **Scaffold caveats worth knowing before the next `npm install` in this
 repo** (SDK 57 is very new — pin these deliberately, don't let npm grab
@@ -201,6 +244,21 @@ latest):
   `expo-asset` — neither is auto-installed as a transitive dependency and
   both must be added explicitly (`package.json` **and** `app.config.ts`'s
   `plugins` array). `npx expo-doctor` catches missing entries here.
+- **A real test account (`you@example.com`) accumulated 33 categories
+  instead of 5** — traced to a genuine backend bug (`budget-app-api`, not
+  mobile): `authCleanupService`'s revoked-refresh-token cleanup runs on
+  every `/auth/request-otp` call and hard-deletes revoked tokens with no
+  grace period (unlike the expired-token cleanup, which has a time
+  cutoff), so a normal logout → re-login cycle wipes the just-revoked
+  token before `verifyOtp`'s `needsSeeding` check runs — that check reads
+  "zero refresh tokens for this user" as "this signup never finished,
+  re-seed the defaults," which is wrong here since it was a legitimate
+  prior login, not a crashed one. Confirmed directly against the DB (`docker
+  exec budget-app-api-postgres-1 psql -U budget_app -d budget_app`), not
+  guessed. Fix (giving the revoked-token cleanup the same cutoff-based
+  grace period) is being handled by a separate agent in that repo, not
+  here — flagging only so a mobile session hitting duplicate categories
+  in this account doesn't re-diagnose it from scratch.
 - **`renderHook` (from `@testing-library/react-native`) combined with a
   real `useQuery` (react-query) hangs indefinitely** — confirmed (via
   `ps aux` showing the process alive at 0% CPU, and file-based synchronous
