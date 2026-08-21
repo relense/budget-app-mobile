@@ -159,9 +159,9 @@ default.
 - [x] Add Category screen (`app/(app)/add-category.tsx`) — modal reached
       from the Home screen's "New budget category" row. First choice (only
       shown if the catalog has a category not yet active this month, via
-      `filterUnusedExpenseCategories`): "Select Existing" vs. "Create New"
-      buttons in place of the name/icon row; picking existing opens a
-      scrollable catalog list (`ExistingCategoryPicker`) and only the
+      `filterUnusedExpenseCategories`): "Select Category" vs. "Create
+      Category" buttons in place of the name/icon row; picking existing opens
+      a scrollable catalog list (`ExistingCategoryPicker`) and only the
       budget amount stays enterable (name/icon/budget-type become
       read-only, calling `addCategoryToMonth` only — no `createCategory`);
       picking new reveals the full form (icon picker, name, Need/Want/

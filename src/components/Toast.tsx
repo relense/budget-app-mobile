@@ -21,18 +21,18 @@ const styles = StyleSheet.create({
   toast: {
     position: 'absolute',
     bottom: 24,
-    // No `left`/`right` here on purpose -- those had pinned the box to a fixed, nearly-full-
-    // screen width regardless of padding, which is why shrinking paddingHorizontal never
-    // visibly changed anything. alignSelf + maxWidth let the box shrink-wrap to the message
-    // instead, so padding actually controls its size now.
-    alignSelf: 'center',
-    maxWidth: '80%',
+    // The original full-width banner, just inset 3px further in on each side than before
+    // (24 -> 27) -- that's the actual "3px each side smaller" ask; the earlier attempts either
+    // changed internal padding (invisible, since left/right pinned the outer width regardless)
+    // or shrink-wrapped to the text (too small).
+    left: 27,
+    right: 27,
     // Pastel red, matching this app's icon palette (the "heart" icon's tone) -- signals "this
     // went wrong" without needing a harsher solid red, consistent with every other pastel
     // surface in this screen.
     backgroundColor: '#F3C8C8',
     borderRadius: 12,
-    paddingVertical: 8,
+    paddingVertical: 12,
     paddingHorizontal: 16,
     alignItems: 'center',
     zIndex: 30,
