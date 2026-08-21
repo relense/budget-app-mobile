@@ -13,7 +13,17 @@ export async function getStoredTokens(): Promise<AuthTokens | null> {
     return null;
   }
 
-  const parsed = JSON.parse(raw) as AuthTokens;
+  let parsed: AuthTokens;
+  try {
+    parsed = JSON.parse(raw) as AuthTokens;
+  } catch (err) {
+    // An unparseable value (corrupt write, future format change) is treated the same as "no
+    // tokens" -- letting this throw would reject bootstrap()'s fire-and-forget promise with
+    // no handler, silently stranding the app on the loading/splash screen forever.
+    console.warn('Stored auth tokens were not valid JSON, treating as signed out', err);
+    return null;
+  }
+
   if (!parsed.accessToken || !parsed.refreshToken) {
     return null;
   }

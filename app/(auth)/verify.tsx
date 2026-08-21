@@ -84,7 +84,10 @@ export default function VerifyScreen() {
   }
 
   async function handleResend() {
-    if (secondsLeft > 0) return;
+    // Also guards against a slow in-flight verify resolving after resend has already reset
+    // `status` -- without this, its catch block could flip `status` back to 'error' right
+    // after resend just cleared it.
+    if (secondsLeft > 0 || isVerifyingRef.current) return;
     setStatus('idle');
     setErrorMessage(null);
     setCode('');
