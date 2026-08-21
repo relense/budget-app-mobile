@@ -2,15 +2,17 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import {
   ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
+  View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { OtpRequestError, requestOtp } from '../../src/auth/authApi';
+import { Logo } from '../../src/components/Logo';
 import { getApiUrl } from '../../src/lib/apiUrl';
 import { useTheme } from '../../src/theme/ThemeProvider';
 
@@ -18,6 +20,7 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function LoginScreen() {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const [email, setEmail] = useState('');
   const [status, setStatus] = useState<'idle' | 'submitting' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -49,62 +52,79 @@ export default function LoginScreen() {
   }
 
   return (
-    <KeyboardAvoidingView
-      style={[styles.container, { backgroundColor: colors.background.screen }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      <Text style={[styles.headline, { color: colors.text.primary }]}>Log in</Text>
-      <Text style={[styles.subtext, { color: colors.text.secondary }]}>
-        Enter your email and we&apos;ll send you a one-time code.
-      </Text>
-
-      <TextInput
-        style={[
-          styles.input,
-          { backgroundColor: colors.pill.textInputBackground, color: colors.text.primary },
-        ]}
-        placeholder="you@example.com"
-        placeholderTextColor={colors.text.placeholder}
-        autoCapitalize="none"
-        autoCorrect={false}
-        keyboardType="email-address"
-        textContentType="emailAddress"
-        value={email}
-        onChangeText={(text) => {
-          setEmail(text);
-          if (status === 'error') {
-            setStatus('idle');
-            setErrorMessage(null);
-          }
-        }}
-        editable={status !== 'submitting'}
-        onSubmitEditing={handleSubmit}
-      />
-
-      {status === 'error' && errorMessage ? (
-        <Text style={[styles.error, { color: colors.button.deleteBackground }]}>
-          {errorMessage}
+    <View style={[styles.container, { backgroundColor: colors.background.screen }]}>
+      <ScrollView contentContainerStyle={styles.formSection} keyboardShouldPersistTaps="handled">
+        <Text style={[styles.headline, { color: colors.text.primary }]}>Log in</Text>
+        <Text style={[styles.subtext, { color: colors.text.secondary }]}>
+          Enter your email and we&apos;ll send you a one-time code.
         </Text>
-      ) : null}
 
-      <Pressable
-        style={[styles.button, { backgroundColor: colors.segment.active }]}
-        onPress={handleSubmit}
-        disabled={status === 'submitting'}
-      >
-        {status === 'submitting' ? (
-          <ActivityIndicator color={colors.segment.activeText} />
-        ) : (
-          <Text style={[styles.buttonLabel, { color: colors.segment.activeText }]}>Send code</Text>
-        )}
-      </Pressable>
-    </KeyboardAvoidingView>
+        <TextInput
+          style={[
+            styles.input,
+            { backgroundColor: colors.pill.textInputBackground, color: colors.text.primary },
+          ]}
+          placeholder="you@example.com"
+          placeholderTextColor={colors.text.placeholder}
+          autoCapitalize="none"
+          autoCorrect={false}
+          keyboardType="email-address"
+          textContentType="emailAddress"
+          value={email}
+          onChangeText={(text) => {
+            setEmail(text);
+            if (status === 'error') {
+              setStatus('idle');
+              setErrorMessage(null);
+            }
+          }}
+          editable={status !== 'submitting'}
+          onSubmitEditing={handleSubmit}
+        />
+
+        {status === 'error' && errorMessage ? (
+          <Text style={[styles.error, { color: colors.button.deleteBackground }]}>
+            {errorMessage}
+          </Text>
+        ) : null}
+
+        <Pressable
+          style={[styles.button, { backgroundColor: colors.segment.active }]}
+          onPress={handleSubmit}
+          disabled={status === 'submitting'}
+        >
+          {status === 'submitting' ? (
+            <ActivityIndicator color={colors.segment.activeText} />
+          ) : (
+            <Text style={[styles.buttonLabel, { color: colors.segment.activeText }]}>
+              Send code
+            </Text>
+          )}
+        </Pressable>
+      </ScrollView>
+
+      {/* Rendered after (on top of) the ScrollView so it stays visible as a floating header
+          instead of the scrolled content painting over it when the keyboard shrinks the
+          available space. */}
+      <View style={[styles.logoWrap, { top: insets.top + 24 }]} pointerEvents="none">
+        <Logo />
+      </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  logoWrap: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+  },
+  formSection: {
+    flexGrow: 1,
     justifyContent: 'center',
     paddingHorizontal: 24,
   },
@@ -112,10 +132,12 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: '700',
     marginBottom: 8,
+    textAlign: 'center',
   },
   subtext: {
     fontSize: 14,
     marginBottom: 32,
+    textAlign: 'center',
   },
   input: {
     borderRadius: 16,

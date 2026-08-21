@@ -1,4 +1,10 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+
+const testSafeAreaMetrics = {
+  frame: { x: 0, y: 0, width: 390, height: 844 },
+  insets: { top: 47, left: 0, right: 0, bottom: 34 },
+};
 
 import { useAuth } from '../../../src/auth/AuthContext';
 import { OtpVerifyError, verifyOtp } from '../../../src/auth/authApi';
@@ -20,9 +26,11 @@ const mockSignIn = jest.fn();
 
 async function renderVerify() {
   return render(
-    <ThemeProvider>
-      <VerifyScreen />
-    </ThemeProvider>,
+    <SafeAreaProvider initialMetrics={testSafeAreaMetrics}>
+      <ThemeProvider>
+        <VerifyScreen />
+      </ThemeProvider>
+    </SafeAreaProvider>,
   );
 }
 
