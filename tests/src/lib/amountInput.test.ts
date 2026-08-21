@@ -3,6 +3,7 @@ import {
   appendDecimalPoint,
   appendDigit,
   backspaceAmount,
+  centsToAmountText,
 } from '../../../src/lib/amountInput';
 
 describe('appendDigit', () => {
@@ -62,5 +63,19 @@ describe('amountTextToCents', () => {
 
   it('handles a whole number with no decimal point', () => {
     expect(amountTextToCents('700')).toBe(70000);
+  });
+});
+
+describe('centsToAmountText', () => {
+  it('formats whole-euro cents with 2 decimal places', () => {
+    expect(centsToAmountText(70000)).toBe('700.00');
+  });
+
+  it('formats cents with a fractional part', () => {
+    expect(centsToAmountText(968)).toBe('9.68');
+  });
+
+  it('round-trips with amountTextToCents', () => {
+    expect(amountTextToCents(centsToAmountText(70000))).toBe(70000);
   });
 });

@@ -23,3 +23,9 @@ export function amountTextToCents(text: string): number {
   if (Number.isNaN(value)) return 0;
   return Math.round(value * 100);
 }
+
+// Bare cents -> raw keypad text (e.g. 70000 -> "700.00") so an edit screen's keypad starts
+// pre-filled with the current amount rather than empty.
+export function centsToAmountText(cents: number): string {
+  return (cents / 100).toFixed(2);
+}
