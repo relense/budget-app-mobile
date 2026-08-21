@@ -70,7 +70,22 @@ references (mockups + Excel structure) and grill layout/states/copy/colors/
 edge-cases per screen — never assume or fill gaps with a "reasonable"
 default.
 
-- [ ] Design references reviewed (mockups + Excel structure)
+- [x] Mockups reviewed — 24 screenshots in `mockups/` (budget home tabs,
+      category/fund detail, the shared numeric-keypad entry UI, savings
+      funds). Colors + typography extracted into
+      `src/theme/design-tokens.json` (raw reference) and
+      `src/theme/colors.ts` / `src/theme/typography.ts` /
+      `src/theme/theme.ts` (typed runtime values, wired into
+      `app/_layout.tsx` via `ThemeProvider`/`useTheme()`). Approximate by
+      eye, not pixel-sampled — refine by hand if exact hex/font matters.
+      **No auth/login mockup exists** (OTP login is a Phase-1 backend
+      design choice, not part of the original Excel-based app design) —
+      those screens will be designed conversationally, borrowing this
+      palette. **Dark mode has no design reference yet** —
+      `theme.ts#resolveTheme` deliberately always returns the light theme
+      for now (documented in code), not a real dark palette.
+- [ ] Excel structure (`VISAO ANUAL 2026.xlsx`) reviewed — not done yet,
+      only the mockups have been.
 - [x] Expo project scaffold (TypeScript, Expo Router, `graphql-request` +
       `@tanstack/react-query`, ESLint + Prettier, Jest + React Native
       Testing Library) — SDK 57, `npm`, bundle id
@@ -78,7 +93,7 @@ default.
       `.env` (via `expo-constants`); `src/lib/apiUrl.ts` handles the
       Android-emulator `localhost` → `10.0.2.2` rewrite in dev.
 - [ ] Auth flow (OTP request/verify screens, token storage, silent refresh)
-- [ ] First screen — TBD, pending design interview
+- [ ] First screen — TBD
 
 **Scaffold caveats worth knowing before the next `npm install` in this
 repo** (SDK 57 is very new — pin these deliberately, don't let npm grab
