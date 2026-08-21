@@ -159,12 +159,15 @@ session) — this is just the reasoning behind the ones that matter most here:
 Auth (REST, not GraphQL — request/response actions rather than queries):
 
 - `POST /auth/request-otp` — body: `{ email }`. Always `200` regardless of
-  whether the email exists (no account enumeration). Rate-limited.
+  whether the email exists (no account enumeration). Rate-limited 3/15min
+  by IP+email — the UI should back off a "resend code" action accordingly.
 - `POST /auth/verify-otp` — body: `{ email, code, deviceLabel? }` → `200 {
   accessToken, refreshToken, user }`. First-ever login for an email also
-  creates the account (seeded with default categories). `401` with a
-  specific error code on failure (`code_not_found` \| `code_expired` \|
-  `too_many_attempts` \| `incorrect_code`).
+  creates the account (seeded with default categories). Rate-limited
+  10/15min by IP+email (a secondary backstop — the OTP itself caps wrong
+  guesses at 5 attempts, see below). `401` with a specific error code on
+  failure (`code_not_found` \| `code_expired` \| `too_many_attempts` \|
+  `incorrect_code`).
 - `POST /auth/refresh` — body: `{ refreshToken }` → `200 { accessToken,
   refreshToken }`. **Mandatory rotation** — the old token is revoked,
   reusing it fails (`401 { error: "refresh_token_invalid" }`).
@@ -290,7 +293,7 @@ input RecurringExpenseInput {
   name: String!
   amountCents: Int!
   categoryId: ID! # an existing category — never auto-created
-  budgetType: BudgetType!
+  budgetType: BudgetType! # NEED or WANT only — server rejects SAVINGS here
   dueDay: Int!
 }
 
@@ -337,6 +340,7 @@ input UpdateSavingsMovementInput {
 # a different fund — out of scope, that's really two funds' balances changing atomically at once.
 
 type Query {
+  ping: String! # no auth required — the one field on this endpoint that isn't user-scoped
   currentMonth: BudgetMonth! # derived, never persisted by this query
   categories: [Category!]! # full catalog, every category regardless of month
   categoryMonths(month: String!, direction: Direction): [CategoryMonth!]! # active categories for a month; direction filters income vs expense

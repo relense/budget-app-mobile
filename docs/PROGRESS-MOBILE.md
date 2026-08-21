@@ -90,7 +90,11 @@ latest):
   `react-native`'s own version) — a newer version's `setup-env.js` doesn't
   match this RN version's source layout.
 - `.npmrc` sets `legacy-peer-deps=true` — `expo-router@57.0.15`'s bundled
-  `@expo/ui` (web-only Radix/vaul components, unused on native) pins
-  `react-dom@^19.2.8` against this SDK's own `react-dom@19.2.3`, an
-  upstream packaging bug as of this SDK release. Safe to remove once a
-  patched `expo-router`/`@expo/ui` ships.
+  `@expo/ui` transitively pulls in several `@radix-ui/*` packages and
+  `vaul` (web-only Tabs-picker components, unused on native), each of
+  which declares `react-dom` as a **required** peer (`^16.8`..`^19.0.0-rc`
+  range) — but this is a mobile-only project, so `react-dom` isn't
+  installed anywhere in the tree to satisfy any of them. Verified directly
+  against `package-lock.json`, not just the resolver's warning. Safe to
+  remove once `expo-router`/`@expo/ui` mark that peer optional or stop
+  bundling web-only deps into the native install.
