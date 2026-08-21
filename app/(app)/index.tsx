@@ -253,28 +253,6 @@ export default function HomeScreen() {
           />
         </Pressable>
 
-        {metricMenuOpen ? (
-          <View
-            style={[
-              styles.metricMenu,
-              { backgroundColor: colors.background.screen, borderColor: colors.segment.track },
-            ]}
-          >
-            {HEADER_METRIC_ORDER.filter((m) => m !== headerMetric).map((m) => (
-              <Pressable
-                key={m}
-                style={styles.metricMenuItem}
-                onPress={() => {
-                  setHeaderMetric(m);
-                  setMetricMenuOpen(false);
-                }}
-              >
-                <Text style={{ color: colors.text.primary }}>{HEADER_METRIC_LABELS[m]}</Text>
-              </Pressable>
-            ))}
-          </View>
-        ) : null}
-
         <View style={[styles.tabRow, { backgroundColor: colors.segment.track }]}>
           {TABS.map(({ key, label }) => (
             <Pressable
@@ -300,6 +278,39 @@ export default function HomeScreen() {
           </Text>
         ) : null}
       </View>
+
+      {metricMenuOpen ? (
+        <>
+          {/* Full-screen backdrop (sibling of the header, so it covers the whole screen, not
+              just the header area) so tapping anywhere outside the menu dismisses it, instead
+              of forcing the user to pick one of the options. Sits below the menu itself in
+              z-order (zIndex 9 vs. 10) so menu-item taps still land on them, not this. */}
+          <Pressable
+            testID="header-metric-menu-backdrop"
+            style={[StyleSheet.absoluteFill, styles.metricMenuBackdrop]}
+            onPress={() => setMetricMenuOpen(false)}
+          />
+          <View
+            style={[
+              styles.metricMenu,
+              { backgroundColor: colors.background.screen, borderColor: colors.segment.track },
+            ]}
+          >
+            {HEADER_METRIC_ORDER.filter((m) => m !== headerMetric).map((m) => (
+              <Pressable
+                key={m}
+                style={styles.metricMenuItem}
+                onPress={() => {
+                  setHeaderMetric(m);
+                  setMetricMenuOpen(false);
+                }}
+              >
+                <Text style={{ color: colors.text.primary }}>{HEADER_METRIC_LABELS[m]}</Text>
+              </Pressable>
+            ))}
+          </View>
+        </>
+      ) : null}
 
       <ScrollView contentContainerStyle={styles.listContent}>
         {tab === 'AVAILABLE' ? <AddRow label="New budget category" /> : null}
@@ -366,6 +377,9 @@ const styles = StyleSheet.create({
   },
   headerLabel: {
     fontSize: 13,
+  },
+  metricMenuBackdrop: {
+    zIndex: 9,
   },
   metricMenu: {
     position: 'absolute',

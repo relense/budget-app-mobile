@@ -218,6 +218,18 @@ describe('HomeScreen', () => {
     expect(screen.getByText('€282.87')).toBeTruthy();
   });
 
+  it('closes the header metric menu when tapping outside it, without changing the metric', async () => {
+    await renderHomeScreen();
+
+    await fireEvent.press(screen.getByText('Available Budgeted'));
+    expect(screen.getByText('Total Balance')).toBeTruthy();
+
+    await fireEvent.press(screen.getByTestId('header-metric-menu-backdrop'));
+
+    expect(screen.queryByText('Total Balance')).toBeNull();
+    expect(screen.getByText('Available Budgeted')).toBeTruthy();
+  });
+
   it('signs out when the profile icon is pressed', async () => {
     await renderHomeScreen();
 
