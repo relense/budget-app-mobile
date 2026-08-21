@@ -25,7 +25,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   web: {
     favicon: './assets/favicon.png',
   },
-  plugins: ['expo-router', 'expo-status-bar'],
+  plugins: ['expo-router', 'expo-status-bar', 'expo-secure-store', 'expo-splash-screen'],
   experiments: {
     typedRoutes: true,
   },
