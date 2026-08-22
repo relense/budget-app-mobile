@@ -348,8 +348,14 @@ default.
       it anywhere after this). Copy: "New budget category" → "New
       Category" (Available tab's add row); Add Category's "Total budget"
       label → "Total category budget" (Edit Category's own "Total budget"
-      label was left as-is — only Add Category was asked for). 266 tests
-      total across 33 suites.
+      label was left as-is — only Add Category was asked for). Follow-up in
+      the same pass: an Available row whose `actualAmountCents` exceeds its
+      `monthlyBudgetCents` now shows "Overspent" instead of "Available" as
+      its left-side subtitle, in the same red (`colors.button.deleteBackground`)
+      already used for delete/error text elsewhere, instead of the plain
+      gray every other row uses — `ListRow` gained an optional
+      `subtitleColor` prop for this (defaults to the existing gray). 267
+      tests total across 33 suites.
 
 **Scaffold caveats worth knowing before the next `npm install` in this
 repo** (SDK 57 is very new — pin these deliberately, don't let npm grab

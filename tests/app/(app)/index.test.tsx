@@ -225,6 +225,27 @@ describe('HomeScreen', () => {
     expect(screen.queryByText('28%')).toBeNull();
   });
 
+  it('shows "Overspent" in red instead of "Available" once a category has spent past its budget', async () => {
+    mockedUseCategoryMonths.mockImplementation((_month: string, direction: string) => ({
+      ...idle,
+      data:
+        direction === 'EXPENSE'
+          ? [{ ...expenseCategoryMonths[0], actualAmountCents: 80000 }, expenseCategoryMonths[1]]
+          : incomeCategoryMonths,
+    }));
+    await renderHomeScreen();
+
+    expect(screen.getByText('Overspent')).toBeTruthy();
+    const overspentLabelStyle = ([] as unknown[])
+      .concat(screen.getByText('Overspent').props.style)
+      .filter(Boolean) as Record<string, unknown>[];
+    expect(overspentLabelStyle.some((s) => s.color === '#F2705C')).toBe(true);
+
+    // The category that's still within budget keeps the normal "Available" label.
+    expect(screen.getByText('Eating Out')).toBeTruthy();
+    expect(screen.getAllByText('Available')).toHaveLength(2); // tab label + Eating Out's row
+  });
+
   it('navigates to Add Category when "New Category" is pressed', async () => {
     await renderHomeScreen();
 
