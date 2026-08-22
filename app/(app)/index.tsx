@@ -19,7 +19,6 @@ import { RetryableError } from '../../src/components/RetryableError';
 import { SwipeableRow } from '../../src/components/SwipeableRow';
 import {
   mostRecentDate,
-  percentSpent,
   sumActualCents,
   sumAvailableBudgetedCents,
   sumRecurringCents,
@@ -145,36 +144,40 @@ export default function HomeScreen() {
 
   function renderRows() {
     if (tab === 'AVAILABLE') {
-      return (expenseCategoryMonths.data ?? []).map((cm) => (
-        <SwipeableRow
-          key={`${cm.id}-${listResetKey}`}
-          testID={`swipe-edit-action-${cm.id}`}
-          onEdit={() =>
-            router.push({
-              pathname: '/edit-category',
-              params: {
-                categoryMonthId: cm.id,
-                categoryId: cm.category.id,
-                name: cm.category.name,
-                icon: cm.category.icon,
-                color: cm.category.color,
-                budgetType: cm.category.budgetType ?? '',
-                direction: cm.category.direction,
-                monthlyBudgetCents: String(cm.monthlyBudgetCents),
-              },
-            })
-          }
-        >
-          <ListRow
-            icon={<CategoryIcon name={cm.category.icon} color={colors.text.primary} />}
-            circleColor={cm.category.color}
-            title={cm.category.name}
-            subtitle="Available"
-            amountText={formatCents(cm.monthlyBudgetCents - cm.actualAmountCents)}
-            percentText={`${percentSpent(cm.actualAmountCents, cm.monthlyBudgetCents)}%`}
-          />
-        </SwipeableRow>
-      ));
+      return (expenseCategoryMonths.data ?? []).map((cm) => {
+        const isOverBudget = cm.actualAmountCents > cm.monthlyBudgetCents;
+        return (
+          <SwipeableRow
+            key={`${cm.id}-${listResetKey}`}
+            testID={`swipe-edit-action-${cm.id}`}
+            onEdit={() =>
+              router.push({
+                pathname: '/edit-category',
+                params: {
+                  categoryMonthId: cm.id,
+                  categoryId: cm.category.id,
+                  name: cm.category.name,
+                  icon: cm.category.icon,
+                  color: cm.category.color,
+                  budgetType: cm.category.budgetType ?? '',
+                  direction: cm.category.direction,
+                  monthlyBudgetCents: String(cm.monthlyBudgetCents),
+                },
+              })
+            }
+          >
+            <ListRow
+              icon={<CategoryIcon name={cm.category.icon} color={colors.text.primary} />}
+              circleColor={cm.category.color}
+              title={cm.category.name}
+              subtitle={isOverBudget ? 'Overspent' : 'Available'}
+              subtitleColor={isOverBudget ? colors.button.deleteBackground : undefined}
+              amountText={formatCents(cm.actualAmountCents)}
+              secondaryAmountText={formatCents(cm.monthlyBudgetCents)}
+            />
+          </SwipeableRow>
+        );
+      });
     }
     if (tab === 'EXPENSES') {
       return expenseTransactions.map((t) => (
@@ -200,10 +203,6 @@ export default function HomeScreen() {
             title={t.merchant ?? t.categoryMonth.category.name}
             subtitle={formatDate(t.date)}
             amountText={formatCents(t.amountCents)}
-            // The category's cumulative spend vs. its budget -- not this one transaction's own
-            // amount vs. budget, which could never show over 100% for a category that's only
-            // over budget once several transactions are added up.
-            percentText={`${percentSpent(t.categoryMonth.actualAmountCents, t.categoryMonth.monthlyBudgetCents)}%`}
           />
         </SwipeableRow>
       ));
@@ -351,7 +350,7 @@ export default function HomeScreen() {
 
       <ScrollView contentContainerStyle={styles.listContent}>
         {tab === 'AVAILABLE' ? (
-          <AddRow label="New budget category" onPress={() => router.push('/add-category')} />
+          <AddRow label="New Category" onPress={() => router.push('/add-category')} />
         ) : null}
         {tab === 'RECURRENT' ? <AddRow label="New recurrent expense" /> : null}
         {tab === 'INCOME' ? <AddRow label="New income" /> : null}

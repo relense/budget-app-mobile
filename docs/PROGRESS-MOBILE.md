@@ -338,6 +338,24 @@ default.
         to that batching) — confirmed by checking out the pre-fix
         `AuthContext.tsx` in isolation and rerunning both tests against it
         before restoring the fix. 265 tests total across 33 suites.
+- [x] Available/Expenses row layout + copy tweaks — the Available tab's
+      category row now shows amount *spent so far* as the headline figure
+      (was the remaining-available amount) with the category's total
+      budget in gray underneath (was the percent-spent); the Expenses
+      tab's transaction rows dropped the percent-spent text entirely,
+      showing only the transaction's own amount. `ListRow`'s now-unused
+      `percentText` prop was removed rather than left dead (nothing renders
+      it anywhere after this). Copy: "New budget category" → "New
+      Category" (Available tab's add row); Add Category's "Total budget"
+      label → "Total category budget" (Edit Category's own "Total budget"
+      label was left as-is — only Add Category was asked for). Follow-up in
+      the same pass: an Available row whose `actualAmountCents` exceeds its
+      `monthlyBudgetCents` now shows "Overspent" instead of "Available" as
+      its left-side subtitle, in the same red (`colors.button.deleteBackground`)
+      already used for delete/error text elsewhere, instead of the plain
+      gray every other row uses — `ListRow` gained an optional
+      `subtitleColor` prop for this (defaults to the existing gray). 267
+      tests total across 33 suites.
 - [x] Add Transaction defaults the category pill to whatever category the
       most recently *created* transaction used this month, instead of
       always the first active expense category — `app/(app)/add-transaction.tsx`

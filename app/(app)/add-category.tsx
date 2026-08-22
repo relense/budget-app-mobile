@@ -316,7 +316,7 @@ export default function AddCategoryScreen() {
             { color: colors.text.secondary },
           ]}
         >
-          Total budget
+          Total category budget
         </Text>
         <Text style={styles.amountRow}>
           <Text style={[styles.currencyPrefix, { color: colors.text.secondary }]}>€</Text>

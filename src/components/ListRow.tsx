@@ -8,17 +8,19 @@ export function ListRow({
   circleColor,
   title,
   subtitle,
+  subtitleColor,
   amountText,
   secondaryAmountText,
-  percentText,
 }: {
   icon: ReactNode;
   circleColor: string;
   title: string;
   subtitle?: string;
+  // Overrides the default secondary/gray subtitle color -- e.g. flagging an over-budget
+  // category in the same red used for delete/error text elsewhere, instead of a plain color.
+  subtitleColor?: string;
   amountText: string;
   secondaryAmountText?: string;
-  percentText?: string;
 }) {
   const { colors } = useTheme();
 
@@ -30,7 +32,9 @@ export function ListRow({
           {title}
         </Text>
         {subtitle ? (
-          <Text style={[styles.subtitle, { color: colors.text.secondary }]}>{subtitle}</Text>
+          <Text style={[styles.subtitle, { color: subtitleColor ?? colors.text.secondary }]}>
+            {subtitle}
+          </Text>
         ) : null}
       </View>
       <View style={styles.amountColumn}>
@@ -39,9 +43,6 @@ export function ListRow({
           <Text style={[styles.subtitle, { color: colors.text.secondary }]}>
             {secondaryAmountText}
           </Text>
-        ) : null}
-        {percentText ? (
-          <Text style={[styles.subtitle, { color: colors.text.secondary }]}>{percentText}</Text>
         ) : null}
       </View>
     </View>
