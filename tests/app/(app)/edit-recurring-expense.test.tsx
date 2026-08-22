@@ -108,6 +108,7 @@ const baseParams = {
   name: 'Water',
   amountCents: '2196',
   categoryId: 'c-shopping',
+  categoryName: 'Shopping',
   categoryIcon: 'cart',
   categoryColor: '#4C6EF5',
   budgetType: 'NEED',
@@ -264,6 +265,28 @@ describe('EditRecurringExpenseScreen', () => {
 
     await fireEvent.press(screen.getByTestId('paid-pill'));
 
+    expect(markPaidMutateAsync).toHaveBeenCalledWith({
+      recurringExpenseId: 're-water',
+      amountCents: 2196,
+      date: '2026-09-15',
+    });
+    expect(mockedRouterBack).toHaveBeenCalledTimes(1);
+  });
+
+  it('marks paid with the last-saved amount, not a live unconfirmed edit to the amount field', async () => {
+    await renderScreen();
+
+    // Edit the amount but never press Confirm -- the first backspace clears the pre-filled
+    // 21.96, then typing "50" lands on 5000 cents, unsaved.
+    await fireEvent.press(screen.getByTestId('keypad-backspace'));
+    await fireEvent.press(screen.getByTestId('keypad-digit-5'));
+    await fireEvent.press(screen.getByTestId('keypad-digit-0'));
+
+    await fireEvent.press(screen.getByTestId('paid-pill'));
+
+    // Still the original, persisted 2196 -- not the unsaved 5000 -- so the created transaction
+    // matches what the server's paidThisMonth check compares against (the row's own stored
+    // amountCents, untouched since Confirm was never pressed).
     expect(markPaidMutateAsync).toHaveBeenCalledWith({
       recurringExpenseId: 're-water',
       amountCents: 2196,

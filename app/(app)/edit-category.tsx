@@ -63,9 +63,13 @@ export default function EditCategoryScreen() {
   const deleteTransaction = useDeleteTransaction();
 
   const isIncome = params.direction === 'INCOME';
-  const transactionIds: string[] = params.transactionIds
-    ? JSON.parse(params.transactionIds)
-    : [];
+  // Mutable, starting from the route params' snapshot -- shrinks as deletes succeed (see
+  // handleDeleteConfirmed) so a retry after a partial failure only re-attempts the ones that
+  // actually failed, instead of re-sending already-deleted ids forever (those would just keep
+  // failing "not found", permanently stuck).
+  const [pendingTransactionIds, setPendingTransactionIds] = useState<string[]>(() =>
+    params.transactionIds ? JSON.parse(params.transactionIds) : [],
+  );
 
   const [name, setName] = useState(params.name);
   const [icon, setIcon] = useState(params.icon);
@@ -192,13 +196,25 @@ export default function EditCategoryScreen() {
       // deleting the category can safely take them with it instead of blocking the user and
       // making them unmark it received first. allSettled (not all) so a partial failure still
       // surfaces as an error instead of silently leaving some deleted and the category not.
-      if (isIncome && transactionIds.length > 0) {
+      if (isIncome && pendingTransactionIds.length > 0) {
         const results = await Promise.allSettled(
-          transactionIds.map((transactionId) =>
-            deleteTransaction.mutateAsync({ transactionId }),
+          pendingTransactionIds.map((transactionId) =>
+            deleteTransaction.mutateAsync({ transactionId }).then(() => transactionId),
           ),
         );
-        if (results.some((result) => result.status === 'rejected')) {
+        const succeededIds = new Set(
+          results
+            .filter(
+              (result): result is PromiseFulfilledResult<string> => result.status === 'fulfilled',
+            )
+            .map((result) => result.value),
+        );
+        const stillPending = pendingTransactionIds.filter((id) => !succeededIds.has(id));
+        if (stillPending.length > 0) {
+          // Only the ones that actually failed are retried next time -- retrying the full
+          // original list would keep re-sending already-deleted ids, which fail forever ("not
+          // found") and would leave this category permanently undeletable from this screen.
+          setPendingTransactionIds(stillPending);
           setToastMessage(GENERIC_ERROR_MESSAGE);
           return;
         }

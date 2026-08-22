@@ -255,6 +255,40 @@ describe('EditCategoryScreen', () => {
       expect(mockedRouterBack).not.toHaveBeenCalled();
     });
 
+    it('retries only the transactions that failed last time, not the ones already deleted', async () => {
+      mockedUseLocalSearchParams.mockReturnValue(incomeParams);
+      deleteTransactionMutateAsync.mockImplementation(
+        ({ transactionId }: { transactionId: string }) =>
+          transactionId === 't-2'
+            ? Promise.reject(new Error('network error'))
+            : Promise.resolve(undefined),
+      );
+      mockedAlert.mockImplementation((_title, _message, buttons) => {
+        const deleteButton = buttons?.find((button) => button.text === 'Delete');
+        deleteButton?.onPress?.();
+      });
+      await renderScreen();
+
+      await fireEvent.press(screen.getByTestId('delete-category-button'));
+
+      expect(deleteTransactionMutateAsync).toHaveBeenCalledWith({ transactionId: 't-1' });
+      expect(deleteTransactionMutateAsync).toHaveBeenCalledWith({ transactionId: 't-2' });
+      expect(removeFromMonthMutateAsync).not.toHaveBeenCalled();
+
+      // t-1 already succeeded last time; simulate t-2 now succeeding too on retry.
+      deleteTransactionMutateAsync.mockClear();
+      deleteTransactionMutateAsync.mockResolvedValue(undefined);
+
+      await fireEvent.press(screen.getByTestId('delete-category-button'));
+
+      // Only the previously-failed t-2 is retried -- re-sending the already-deleted t-1 would
+      // just fail "not found" forever and leave this category permanently undeletable.
+      expect(deleteTransactionMutateAsync).toHaveBeenCalledTimes(1);
+      expect(deleteTransactionMutateAsync).toHaveBeenCalledWith({ transactionId: 't-2' });
+      expect(removeFromMonthMutateAsync).toHaveBeenCalledWith({ categoryMonthId: 'cm-salary' });
+      expect(mockedRouterBack).toHaveBeenCalled();
+    });
+
     it('does not attempt any transaction deletion for an income category with no transactions', async () => {
       mockedUseLocalSearchParams.mockReturnValue({ ...incomeParams, transactionIds: '[]' });
       mockedAlert.mockImplementation((_title, _message, buttons) => {

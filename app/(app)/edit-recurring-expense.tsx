@@ -66,6 +66,7 @@ export default function EditRecurringExpenseScreen() {
     name: string;
     amountCents: string;
     categoryId: string;
+    categoryName: string;
     categoryIcon: string;
     categoryColor: string;
     budgetType: string;
@@ -92,7 +93,12 @@ export default function EditRecurringExpenseScreen() {
   const [name, setName] = useState(params.name);
   const [selectedCategory, setSelectedCategory] = useState<Category>({
     id: params.categoryId,
-    name: params.name,
+    // The category's own name, not this recurring expense's -- params.name is "Water"/etc.,
+    // not "Shopping". This object is only actually read for its .icon/.color/.id/.direction
+    // before the user (if ever) re-picks a category via ExistingCategoryPicker, which replaces
+    // it wholesale with a real Category -- but a wrong .name here was still a landmine for any
+    // future code path that reads it directly (e.g. a "current category" label).
+    name: params.categoryName,
     icon: params.categoryIcon,
     color: params.categoryColor,
     budgetType: (params.budgetType as BudgetType) ?? null,
@@ -211,7 +217,13 @@ export default function EditRecurringExpenseScreen() {
       } else {
         await markRecurringPaid.mutateAsync({
           recurringExpenseId: params.recurringExpenseId,
-          amountCents: amountTextToCents(amountText),
+          // The row's last-saved amount, not whatever's currently typed into the (still
+          // unconfirmed) amount field -- the server computes paidThisMonth by comparing the
+          // created transaction's total against the row's own stored amountCents, so marking
+          // paid with a live, not-yet-saved edit could create a transaction below that stored
+          // threshold and silently fail to flip the row to Paid. Confirm is what persists an
+          // amount edit; this pill acts on whatever's currently saved, independent of it.
+          amountCents: Number(params.amountCents),
           date: todayIsoDate(),
         });
       }

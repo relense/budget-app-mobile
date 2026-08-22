@@ -302,6 +302,7 @@ export default function HomeScreen() {
                   name: re.name,
                   amountCents: String(re.amountCents),
                   categoryId: re.category.id,
+                  categoryName: re.category.name,
                   categoryIcon: re.category.icon,
                   categoryColor: re.category.color,
                   budgetType: re.budgetType,

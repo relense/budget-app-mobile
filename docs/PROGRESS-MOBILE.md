@@ -849,6 +849,39 @@ default.
       the income-delete-cascade, 1 new for the sort, regression-shaped
       since the fixture's insertion order and alphabetical order
       deliberately differ).
+- [x] `pr-reviewer` pass on the branch, three real findings fixed. **Cascade
+      -delete retry could get permanently stuck**: `edit-category.tsx`'s
+      income transaction-delete list was parsed once from route params
+      and never updated, so a partial failure meant every retry re-sent
+      the *full original* id list, including ones already deleted (which
+      fail "not found" forever) — the category became undeletable from
+      that screen instance without backing out and re-swiping in for
+      fresh params. Fixed by tracking the pending ids as state
+      (`pendingTransactionIds`) that shrinks to only the ones that
+      actually failed after each attempt. **`edit-recurring-expense.tsx`'s
+      local `selectedCategory.name` was wrong** — built from `params.name`
+      (the recurring expense's own name, e.g. "Water"), not the
+      category's name (e.g. "Shopping"); there was no `categoryName` param
+      at all. Harmless today (nothing reads `.name` off it before the
+      user re-picks a real category), but a landmine for the next feature
+      that does. Fixed by threading a new `categoryName` param from
+      `index.tsx`. **Marking paid used the live, unconfirmed amount
+      field** instead of the row's last-saved `amountCents` — editing the
+      amount and tapping the Paid pill without pressing Confirm first
+      created a transaction against the *new* typed amount while the
+      server's `paidThisMonth` check still compares against the *old*
+      stored amount, so a lower typed value could create a transaction
+      that doesn't actually clear the stored threshold, silently failing
+      to flip the row to Paid. Fixed by always using `Number(params.amountCents)`
+      for `markRecurringPaid` — the Paid pill now acts on the last-saved
+      amount regardless of any in-progress, unconfirmed edit, matching
+      how the rest of this app treats Confirm as the only thing that
+      persists an edit. (A fourth finding, nitpick-level, was about
+      `syncCategoryMonthBudget`'s best-effort drift being self-correcting
+      via the hard-minimum floor — no fix needed, already the documented
+      tradeoff.) 428 tests total across 42 suites (3 new: retry-only-
+      failed-ids, the Paid-pill-uses-saved-amount case, plus 4 existing
+      navigation-param assertions updated for the new `categoryName` param).
 
 **Scaffold caveats worth knowing before the next `npm install` in this
 repo** (SDK 57 is very new — pin these deliberately, don't let npm grab
