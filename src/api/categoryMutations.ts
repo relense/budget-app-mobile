@@ -262,7 +262,7 @@ export function useCreateIncomeCategoryWithBudget() {
 }
 
 // For reactivating an existing catalog category into the current month, instead of always
-// creating a new one -- see filterUnusedExpenseCategories.
+// creating a new one -- see filterUnusedCategories.
 export function useAddCategoryToMonth() {
   const { requestWithAuth } = useAuth();
   const queryClient = useQueryClient();

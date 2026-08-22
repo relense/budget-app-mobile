@@ -6,7 +6,7 @@ import { useTheme } from '../theme/ThemeProvider';
 import { CategoryIcon } from './CategoryIcon';
 
 // A plain list of catalog categories not yet active this month (see
-// filterUnusedExpenseCategories) -- lets the user reuse one instead of always creating a new,
+// filterUnusedCategories) -- lets the user reuse one instead of always creating a new,
 // potentially-duplicate category. Rendered inside a ScrollView by the screen that owns it,
 // since the catalog can be long; "create a new category instead" is a separate, top-level
 // choice on that screen, not a row in this list.
