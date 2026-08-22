@@ -48,5 +48,9 @@ const styles = StyleSheet.create({
   text: {
     fontSize: 14,
     fontWeight: '600',
+    // Stretch to the toast's full width so a wrapped multi-line message reads as a proper
+    // justified paragraph (even line edges) instead of ragged-right.
+    alignSelf: 'stretch',
+    textAlign: 'justify',
   },
 });

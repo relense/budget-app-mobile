@@ -6,7 +6,7 @@ import { useTheme } from '../theme/ThemeProvider';
 import { CategoryIcon } from './CategoryIcon';
 
 // A plain list of catalog categories not yet active this month (see
-// filterUnusedExpenseCategories) -- lets the user reuse one instead of always creating a new,
+// filterUnusedCategories) -- lets the user reuse one instead of always creating a new,
 // potentially-duplicate category. Rendered inside a ScrollView by the screen that owns it,
 // since the catalog can be long; "create a new category instead" is a separate, top-level
 // choice on that screen, not a row in this list.
@@ -19,9 +19,14 @@ export function ExistingCategoryPicker({
 }) {
   const { colors } = useTheme();
 
+  // Sorted here rather than by each caller -- the backend doesn't guarantee any particular
+  // order, and a picker list is easiest to scan alphabetically regardless of which screen it's
+  // shown from.
+  const sortedCategories = [...categories].sort((a, b) => a.name.localeCompare(b.name));
+
   return (
     <View>
-      {categories.map((category) => (
+      {sortedCategories.map((category) => (
         <Pressable
           key={category.id}
           testID={`existing-category-${category.id}`}

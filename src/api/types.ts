@@ -11,6 +11,7 @@ export interface Category {
 }
 
 export interface TransactionDate {
+  id: string;
   date: string;
 }
 
@@ -31,6 +32,9 @@ export interface RecurringExpense {
   amountCents: number;
   budgetType: BudgetType;
   dueDay: number;
+  // Computed server-side (bare YYYY-MM-DD): dueDay resolved against this row's own month,
+  // clamped to that month's last real day if dueDay doesn't fit (e.g. 31 in a 30-day month).
+  dueDate: string;
   category: Category;
   paidThisMonth: boolean;
   transactions: TransactionDate[];

@@ -52,6 +52,14 @@ export interface CreateCategoryWithBudgetInput {
   monthlyBudgetCents: number;
 }
 
+export interface CreateIncomeCategoryWithBudgetInput {
+  name: string;
+  icon: string;
+  color: string;
+  month: string;
+  monthlyBudgetCents: number;
+}
+
 export interface AddCategoryToMonthInput {
   categoryId: string;
   month: string;
@@ -161,12 +169,47 @@ export async function createCategoryWithBudget(
   });
 }
 
+// Sibling of createCategoryWithBudget above, for add-income.tsx -- direction is always
+// 'INCOME' and budgetType is always null (not meaningful for income, per docs/PLAN.md), so
+// this takes no budgetType param at all rather than accepting one it would ignore.
+export async function createIncomeCategoryWithBudget(
+  baseUrl: string,
+  accessToken: string,
+  input: CreateIncomeCategoryWithBudgetInput,
+): Promise<void> {
+  const { createCategory } = await graphqlRequest<{ createCategory: { id: string } }>(
+    baseUrl,
+    accessToken,
+    CREATE_CATEGORY_MUTATION,
+    {
+      input: {
+        name: input.name,
+        icon: input.icon,
+        color: input.color,
+        budgetType: null,
+        direction: 'INCOME',
+      },
+    },
+  );
+
+  await addCategoryToMonth(baseUrl, accessToken, {
+    categoryId: createCategory.id,
+    month: input.month,
+    monthlyBudgetCents: input.monthlyBudgetCents,
+  });
+}
+
 // Plain, requestWithAuth-taking mutation functions -- see the comment above the plain
 // accessToken-taking functions (this file) / the queryFn helpers in budgetHomeQueries.ts for
 // why (unit-testable without renderHook).
 export function createCategoryWithBudgetMutationFn(requestWithAuth: RequestWithAuth) {
   return (input: CreateCategoryWithBudgetInput) =>
     requestWithAuth((token) => createCategoryWithBudget(getApiUrl(), token, input));
+}
+
+export function createIncomeCategoryWithBudgetMutationFn(requestWithAuth: RequestWithAuth) {
+  return (input: CreateIncomeCategoryWithBudgetInput) =>
+    requestWithAuth((token) => createIncomeCategoryWithBudget(getApiUrl(), token, input));
 }
 
 export function addCategoryToMonthMutationFn(requestWithAuth: RequestWithAuth) {
@@ -205,8 +248,21 @@ export function useCreateCategoryWithBudget() {
   });
 }
 
+export function useCreateIncomeCategoryWithBudget() {
+  const { requestWithAuth } = useAuth();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: createIncomeCategoryWithBudgetMutationFn(requestWithAuth),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['categoryMonths'] });
+      queryClient.invalidateQueries({ queryKey: ['categories'] });
+    },
+  });
+}
+
 // For reactivating an existing catalog category into the current month, instead of always
-// creating a new one -- see filterUnusedExpenseCategories.
+// creating a new one -- see filterUnusedCategories.
 export function useAddCategoryToMonth() {
   const { requestWithAuth } = useAuth();
   const queryClient = useQueryClient();

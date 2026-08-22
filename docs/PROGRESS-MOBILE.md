@@ -64,8 +64,9 @@ export/delete, missing `User` FK retrofit) and GraphQL Code Generator on top.
 
 ## Phase 2 — Mobile app
 
-**Status: scaffold, auth flow, Budget Home, Add/Edit Category, and
-Add/Edit Transaction screens done.** Per `docs/PLAN.md` /
+**Status: scaffold, auth flow, Budget Home, Add/Edit Category,
+Add/Edit Transaction, and Add/Edit Recurring Expense + Income screens
+done.** Per `docs/PLAN.md` /
 `.claude/CLAUDE.md`: before any screen work, must interview for design
 references (mockups + Excel structure) and grill layout/states/copy/colors/
 edge-cases per screen — never assume or fill gaps with a "reasonable"
@@ -426,6 +427,497 @@ default.
       `ListRow`'s `percentText` prop, the thing it computed the value for;
       left orphaned at the time rather than cleaned up alongside it. 284
       tests total across 35 suites.
+- [x] Two small usability fixes, reported directly against the running
+      app: (1) `IconPicker`'s grid (`src/components/IconPicker.tsx`) was
+      left-aligned per row, leaving a ragged, sometimes wide gap on the
+      right whenever a row of icons didn't exactly fill the container —
+      added `justifyContent: 'center'` so a partially-filled row centers
+      instead. (2) `ExistingCategoryPicker` (used by Add/Edit
+      Transaction's category picker and Add Category's existing-category
+      choice) now sorts its `categories` prop alphabetically by name
+      before rendering, instead of echoing whatever order the backend
+      happened to return — the backend doesn't document any particular
+      `categoryMonths`/catalog ordering, so this is a client-side
+      guarantee, not a backend contract. 286 tests total across 35 suites.
+- [x] Recurrent and Income tabs — previously data-only stubs (rows
+      rendered, but "New ..." rows and every row action were inert, see
+      the Budget Home bullet above). Grilled over three rounds (no
+      mockup existed for either screen at first; the user then pointed to
+      the real ones — `Available Budgeted - Home Available(1)/(2).png`,
+      `Shopping pressed expense.png` through `(3)`) before writing any
+      code, per `CLAUDE.md`'s "ask before frontend work" rule. One real
+      backend gap surfaced and was designed around rather than treated as
+      a blocker: **there is no "unmark paid" mutation** —
+      `markRecurringPaid` only ever creates a `Transaction`, so unmarking
+      (recurring) and clearing a received income (below) both work by
+      deleting the transaction(s) the mark/receive action created, using
+      transaction `id`s `CATEGORY_MONTHS_QUERY`/`RECURRING_EXPENSES_QUERY`
+      now fetch (previously only `date`) — flagged to the user as a
+      genuine interface question, not silently worked around.
+      - **Recurring expenses**: `app/(app)/add-recurring-expense.tsx`
+        (category picker scoped to the *full* EXPENSE catalog, not just
+        categories unused this month — a recurring expense can share an
+        already-active category; name; a plain 1-31 due-day field, not
+        the `AmountKeypad`'s date-mode, since a due day has no
+        month/year component; Need/Want toggle, no Savings — the backend
+        rejects it; amount — calls `createRecurringExpense`) and
+        `app/(app)/edit-recurring-expense.tsx`, reached only by swiping a
+        row (tapping does nothing, same as Available/Expenses) —
+        combines a Paid/Unpaid pill (instant tap-toggle: Unpaid→Paid
+        calls `markRecurringPaid` with whatever amount is currently
+        shown + today; Paid→Unpaid deletes every linked transaction this
+        month) with full editing of name/category/Need-Want/due-day/
+        amount (`updateRecurringExpense`) and Delete
+        (`removeRecurringExpenseFromMonth`) in one screen, per the user's
+        explicit direction over the grilling rounds. New
+        `src/api/recurringExpenseMutations.ts` mirrors
+        `transactionMutations.ts`'s shape exactly (plain functions +
+        `requestWithAuth`-taking wrappers + hooks).
+      - **Income**: still just a `Category` (direction `INCOME`) + a
+        per-month budget/expected amount — no new backend entity, and
+        deliberately no "expected receipt date" field (would need a
+        backend schema change, explicitly deferred by the user).
+        `app/(app)/add-income.tsx` mirrors Add Category's
+        existing-vs-create flow minus the Need/Want/Savings picker, using
+        a new small `INCOME_ICON_PALETTE` (`briefcase`/`shield` —
+        already mapped in `CategoryIcon.tsx` but excluded from the
+        16-icon expense palette) and a new
+        `createIncomeCategoryWithBudget` (sibling of
+        `createCategoryWithBudget`, direction fixed `INCOME`, no
+        `budgetType`). `app/(app)/income-received.tsx`, reached by
+        *tapping* an Income row (the one place Recurrent/Income diverge
+        — Income reacts to both tap and swipe, Recurrent only to swipe):
+        "Received" has no stored field, it's derived the same way the
+        row's own amount already is (`actualAmountCents > 0`); the
+        amount keypad prefills with the expected amount but is editable
+        for a short/partial payment: confirm always adds one more
+        `Transaction` against that income row's own `categoryMonthId`
+        (repeatable, for split payments), and the Received/Not-received
+        pill is the quick all-or-nothing toggle (tap while Not received
+        = same as confirm; tap while Received = clear the month). Swipe
+        still opens the *existing* `edit-category.tsx` completely
+        unchanged — it was already generic across direction, so
+        deleting/renaming/rebudgeting an income category needed no new
+        code.
+      - Two small existing-file generalizations, both additive/flagged
+        rather than silent: `src/lib/unusedCategories.ts`'s
+        `filterUnusedExpenseCategories`/`isDuplicateCategoryName` gained
+        a required `direction` param (first renamed
+        `filterUnusedCategories`) instead of a second income-only copy;
+        `IconPicker.tsx` gained an optional `palette` prop defaulting to
+        the expense palette, so `add-category.tsx`'s call site needed no
+        change. 349 tests total across 40 suites.
+- [x] `pr-reviewer` + `test-auditor` pass on the Recurrent/Income branch
+      above, and fixes for both. **pr-reviewer**: one blocking bug — the
+      Recurrent tab's "unmark paid" action (a loop of `useDeleteTransaction`
+      calls) never invalidated `['recurringExpenses']`, so after
+      successfully unmarking a bill the Home screen kept showing it as
+      "Paid" with stale transaction ids until something else happened to
+      invalidate that query. Fixed with a new
+      `useUnmarkRecurringPaid` hook (mirrors `useMarkRecurringPaid`'s
+      invalidation set). Also hardened both the recurring-unmark and
+      income-clear-received delete loops from `Promise.all` to
+      `Promise.allSettled` — a partial failure (some transactions deleted,
+      some not) now surfaces as an error and skips navigating away instead
+      of silently claiming success — and added a client-side guard on
+      Edit Recurring Expense's Delete button, since the backend blocks
+      `removeRecurringExpenseFromMonth` while any transaction references
+      the row (true for anything currently Paid); it now shows "Mark as
+      unpaid before deleting" instead of a doomed request's generic error.
+      **test-auditor**: two real gaps — the multi-row id-mapping in
+      `index.tsx` (`transactions.map(t => t.id)` per row) was only ever
+      exercised by single-row fixtures, so a wrong-row-mapping regression
+      couldn't have been caught; fixed by adding a second Recurrent and
+      Income row to `index.test.tsx`'s fixtures, each with distinct ids.
+      The due-day lower bound (0) was untested everywhere, and
+      Edit Recurring Expense had no due-day boundary tests at all; both
+      fixed. 364 tests total across 40 suites.
+- [x] Two follow-up fixes from direct user feedback on the running app,
+      both on Add/Edit Recurring Expense: (1) their amount keypad looked
+      different from Add/Edit Category's — traced to the container being a
+      `ScrollView` with `keypadWrap: { minHeight: 260 }` instead of a plain
+      `View` with `keypadWrap: { flex: 1 }` (the category screens'
+      pattern), needed at the time because the separate due-day row (see
+      next point) made the form taller. Once that row was removed, both
+      screens switched back to the exact same `View`/`flex: 1` structure
+      as `add-category.tsx`/`edit-category.tsx`. (2) Due day was a plain
+      numeric `TextInput` row; the user asked for it to reuse the shared
+      `AmountKeypad`'s calendar-toggle key instead (the same mechanism
+      `add-transaction.tsx` already uses for its date), with a "Due date
+      day" placeholder. New `src/lib/dueDayInput.ts` mirrors
+      `dateInput.ts`'s day-only helpers but deliberately has **no
+      month/calendar context** — `RecurringExpense.dueDay` is a bare Int,
+      1-31 always valid regardless of which real month it falls in, unlike
+      a transaction's actual date. Both screens now hold the due day as a
+      committed-value + typed-buffer pair (same split
+      `add-transaction.tsx` uses for its date): the buffer resets to `''`
+      every time day-entry mode is (re-)entered, so on Edit (where the due
+      day is pre-filled) the first digit typed replaces the old value
+      outright instead of appending onto it or being rejected as "already
+      2 digits" — the display falls back to the last committed value only
+      while the buffer is still empty, and re-entering day-entry mode after
+      typing (without confirming) correctly shows what was just typed, not
+      the original pre-filled value. 385 tests total across 41 suites.
+- [x] Six more follow-up fixes on Recurring Expense, from direct user
+      feedback against the running app. **Drawer presentation bug**:
+      `app/(app)/_layout.tsx` never registered `add-recurring-expense`,
+      `edit-recurring-expense`, `add-income`, or `income-received` with
+      `presentation: 'modal'` — each screen's own grabber/bottom-sheet JSX
+      was correct, but without this Stack.Screen entry it just pushed as a
+      plain full-screen route. Added a regression test
+      (`tests/app/(app)/_layout.test.tsx`) asserting every non-index screen
+      is registered as a modal, so this can't silently recur. **Recurrent
+      row layout**: Paid/Unpaid moved from the subtitle slot (under the
+      name) to `secondaryAmountText` (under the amount, matching the
+      mockup); the now-empty subtitle shows a literal "WIP due date"
+      placeholder (no real per-row due-date display exists yet).
+      **Icon-tap-to-pay**: `ListRow` gained an optional `onIconPress` prop
+      (every other call site unaffected when omitted) — tapping a
+      Recurrent row's icon marks it paid directly, one plain full-amount
+      transaction dated today; only wired for unpaid rows (an already-paid
+      row's icon has no handler), split/partial payments deferred per the
+      user. **Need/Want removed from both Add and Edit**: the category
+      already carries a Need/Want/Savings designation, so asking again was
+      redundant. New shared `src/lib/recurringBudgetType.ts`
+      (`budgetTypeForCategory`) derives the recurring expense's own
+      required `budgetType` from the selected category's, falling back to
+      Need for a Savings-budgeted category (never valid for a recurring
+      expense). **"Amount" label removed** on both screens — implicit
+      from context; "Due day" is kept when the keypad is in date-entry
+      mode, since that one does need disambiguating. **Edit's Paid/Unpaid
+      pill is now a full-width banner** (`justifyContent: 'space-between'`,
+      no `alignSelf: 'flex-start'`) instead of a small round pill, matching
+      the mockup. **Edit's due-day backspace behavior reworked**: previously
+      a backspace against an untouched pre-filled value was a no-op (fell
+      back to showing the old value); now it clears to blank on first
+      press, same "first touch replaces/clears outright" pattern as the
+      amount field's own `hasEditedAmount` guard, applied to due day via a
+      new `hasEditedDueDay` flag. Saving with the due day left blank no
+      longer blocks or requires a value at all (Edit's `canSubmit` dropped
+      the due-day check entirely, unlike Add, which still requires one) —
+      it silently falls back to the row's original due day
+      (`dueDay ?? Number(params.dueDay)`), since `RecurringExpenseInput.dueDay`
+      is required server-side and there's no "leave unchanged" option to
+      send instead. 410 tests total across 43 suites.
+- [x] Three more Recurring Expense fixes, from a second round of direct
+      user feedback. **Icon tap now toggles both directions** —
+      previously only wired unpaid->paid; tapping an already-Paid row's
+      icon now unmarks it too (`useUnmarkRecurringPaid`, same hook the
+      swipe-to-edit drawer's pill uses, so the `['recurringExpenses']`
+      invalidation isn't duplicated), deleting every linked transaction.
+      **Amount no longer hides when entering day-entry mode** — previously
+      toggling the keypad's calendar key swapped the whole calculator
+      display over to the due-day value, which the user found jarring
+      ("shrinks the calculator"); the amount (`€` + value) is now always
+      visible, and a new due-date row sits below it, always visible too --
+      `dateMode` only decides which one the keypad's digits/backspace
+      currently affect. **Due day is now a real month-aware date, not a
+      bare 1-31 number** — reversed the earlier "no calendar context"
+      design: the day (01-31, gray/`colors.text.placeholder`) is now
+      validated against the actual day count of the current budget month
+      and shown alongside that month's fixed "Mon YYYY" label
+      (black/`colors.text.primary`, e.g. "10 Sep 2026"), reusing
+      `dateInput.ts`'s existing month-aware day-entry helpers
+      (`appendDayDigit`/`backspaceDay`/`formatTypedDay`/
+      `isCompleteDayDigits`/`formatMonthYearLabel` — the exact ones
+      `add-transaction.tsx` already uses for its date) instead of the
+      month-agnostic `dueDayInput.ts` written for the first round of this
+      feedback, which is deleted now that nothing uses it — this is
+      purely a display/typing constraint (can't type day 31 in a
+      30-day month) since `RecurringExpense.dueDay` itself is still
+      just a bare Int with no stored month/year. Both Add and Edit now
+      fetch `useCurrentMonth()` (Edit didn't before) to get that context.
+      398 tests total across 42 suites.
+- [x] Wired the real `RecurringExpense.dueDate` now that the backend has
+      it — the user updated `docs/PLAN.md`/`docs/SERVICES.md` directly
+      (not part of any mobile PR) to add a computed field: `dueDate`
+      (bare `YYYY-MM-DD`) resolves the stored `dueDay` (still just an
+      Int, 1-31, no stored month/year) against the row's own month,
+      clamped to that month's last real day if `dueDay` doesn't fit.
+      `RECURRING_EXPENSES_QUERY` now fetches it, `RecurringExpense` (the
+      client type) gained the field, and the Recurrent tab's row
+      subtitle — a literal "WIP due date" placeholder since that bullet
+      above — now shows `formatDate(re.dueDate)`, the same formatter
+      already used for the Income/Expenses tabs' date subtitles. Add/Edit
+      Recurring Expense's own due-day entry is unaffected: it's still a
+      live, user-typed value (client-computed day + month/year label, see
+      above) since `dueDate` is a read-only computed field, not something
+      `updateRecurringExpense`/`createRecurringExpense` accept. 398 tests
+      total across 42 suites (one test's assertion changed, not added).
+- [x] Corrected a misreading from two rounds back: Add/Edit Recurring
+      Expense's calculator now **swaps** between amount and due-date
+      display (single calculator area, toggled by the keypad's calendar
+      key) — same mechanism/behavior as `add-transaction.tsx`'s date,
+      not the "both always visible in two separate rows" layout built
+      right after the "don't shrink the calculator" feedback. That
+      feedback was actually about the *keypad itself* getting physically
+      smaller (the old `ScrollView` + `minHeight: 260` container, fixed
+      separately by switching to `flex: 1`), not about wanting the amount
+      permanently on screen. The day/month-year gray/black split styling
+      and month-aware validation from the previous pass are unchanged,
+      just folded back into the one swapped display instead of a second
+      permanent row — `dueDateRow`/`dueDateText` styles removed from both
+      screens. 400 tests total across 42 suites.
+- [x] Two more fixes, both narrow. **Due-day color bug**: the day in
+      Add/Edit Recurring Expense's swapped calculator display was always
+      gray (`colors.text.placeholder`), even once a real value was typed
+      or (on Edit) pre-filled from the server — should only be gray while
+      it's genuinely unset (the `--` placeholder); fixed to
+      `dueDayDigits === '' ? colors.text.placeholder : colors.text.primary`
+      in both screens, matching the always-black month/year. **Income
+      Received screen removed entirely** (`app/(app)/income-received.tsx`
+      + its route registration + test deleted) — tapping an Income row
+      now toggles received state directly, no drawer, mirroring the
+      Recurrent tab's icon-tap-to-pay. Not received → received: one plain
+      `Transaction` for the row's expected amount (`monthlyBudgetCents`),
+      dated today, via `useCreateTransaction` — confirmed with the user
+      that `direction` here is server-derived from the income category
+      exactly like every other transaction (see `docs/SERVICES.md`), no
+      special-casing needed. Received → not received: deletes every
+      transaction linked to that `CategoryMonth` this month
+      (`Promise.allSettled`, surfaces a toast on any partial failure,
+      same care as the Recurrent equivalent) — no dedicated
+      `useUnmarkIncomeReceived` hook needed, unlike Recurrent's
+      `useUnmarkRecurringPaid`: "received" is derived from
+      `CategoryMonth.actualAmountCents`, which `useDeleteTransaction`
+      already invalidates. The row's subtitle (previously the most
+      recent transaction's date) now shows "Received"/"Not received"
+      instead. 393 tests total across 41 suites.
+- [x] Two more Add/Edit Recurring Expense fixes, both from the running
+      app. **Name field getting its text selected while typing**: root
+      cause traced to the `keyboard-dismiss-overlay` (a full-screen
+      `Pressable`, `zIndex: 20`, meant only to eat a stray tap-to-dismiss
+      landing on a keypad button underneath) rendering the instant the
+      keyboard appears — which is the same moment the name field is
+      tapped to start typing, so it sat directly on top of the
+      just-focused native `TextInput`. Fixed with a `nameFocused` flag
+      (`onFocus`/`onBlur` on the name input) gating the overlay so it
+      never covers the field currently being typed into — applied to
+      both screens. **Due day no longer required to submit**: previously
+      `canSubmit` (Add) blocked confirm entirely if the due day was
+      left unset; now it isn't part of that check at all, and
+      `handleConfirm` falls back to today's day-of-month
+      (`Number(todayIsoDate().split('-')[2])`) when unset, same
+      "don't block the save, just assume something reasonable" instinct
+      already applied to Edit's blank-due-day case (which falls back to
+      the row's *original* value instead, since it has one). 396 tests
+      total across 41 suites.
+- [x] Two `edit-category.tsx` fixes (this screen is shared by both
+      Available/Expense and Income category editing, reached via
+      swipe-to-edit on either Home tab). **Icon was not editable at
+      all** — it just displayed `params.icon` read-only. Made it
+      editable the same way `add-category.tsx`/`add-income.tsx` already
+      work: the icon pill is now a `Pressable` (with a chevron
+      indicating open/closed state) that opens an `IconPicker` overlay
+      scoped to the right palette (`EXPENSE_ICON_PALETTE` or
+      `INCOME_ICON_PALETTE`, chosen by `params.direction`); selecting an
+      icon updates local state and is sent to `updateCategory` on
+      confirm alongside the correctly re-derived color (`colorForIcon`/
+      `colorForIncomeIcon`) — this also fixed a latent bug where an
+      income category's fixed color was always looked up in the expense
+      palette, silently falling back to the wrong color for icons like
+      `briefcase`/`shield` that aren't in it. **Amount label always read
+      "Total budget"**, even for an income category — now reads
+      "Expected income" when `params.direction === 'INCOME'`. Also
+      proactively applied the same `nameFocused`-gated
+      keyboard-dismiss-overlay fix already made to the recurring-expense
+      screens (see above) here too, since this screen has the identical
+      overlay pattern and would have the identical latent bug even
+      though it hadn't been reported here specifically. 400 tests total
+      across 41 suites.
+- [x] Swapped the `star` expense icon option for `home` — flagged by the
+      user as an icon they didn't recognize the meaning of, with a house
+      icon being the more useful option to offer (rent/mortgage-type
+      categories). `EXPENSE_ICON_PALETTE` now offers `home` in `star`'s
+      old slot (same color, `#EEF3C8`); `CategoryIcon.tsx`'s `ICON_MAP`
+      gained `home: 'home-variant'`. The `star: 'star'` mapping is kept
+      (not deleted) even though it's no longer offered in the picker —
+      `icon` is a persisted free-text `String` on `Category` with no
+      backend enum (confirmed against `docs/PLAN.md`'s schema), so any
+      category already saved with `icon: 'star'` still needs to resolve
+      to a real glyph rather than falling back to the generic one. 400
+      tests total across 41 suites (no new tests needed — existing
+      palette/picker tests were already icon-agnostic, aside from one
+      `edit-category.test.tsx` assertion updated from `star`/`#EEF3C8`
+      to `home`/`#EEF3C8`).
+- [x] Specific delete-blocked toast for `edit-category.tsx`, replacing
+      the generic "Something went wrong" message. `removeCategoryFromMonth`
+      throws `category_month_has_transactions` or
+      `category_month_has_recurring_expenses` (both uppercased into
+      `extensions.code` per the GraphQL error convention, see `SERVICES.md`)
+      when the category still has real data hanging off it — the user
+      correctly guessed the recurring-expense case exists but had no way
+      to tell it apart from a genuine failure, since both showed the same
+      generic copy. Added `hasGraphqlErrorCode(err, code)` to
+      `graphqlClient.ts` (`isUnauthenticatedError` now just calls it with
+      `'UNAUTHENTICATED'`, no behavior change) and used it in
+      `edit-category.tsx`'s delete catch block to show "This category has
+      transactions or recurring expenses linked to it. Delete those
+      first." for either code, generic copy for anything else. Scoped to
+      this screen only, per the user's report — `edit-recurring-expense.tsx`
+      already has its own client-side pre-check for its one blocking case
+      (paid transactions) and wasn't touched. 402 tests total across 41
+      suites.
+- [x] Two small follow-up polish items on that same delete-blocked toast.
+      **Longer duration**: this screen's `TOAST_DURATION_MS` bumped from
+      2500ms to 4500ms (the other 4 screens sharing that constant name are
+      untouched) — the message is a full sentence and the default was
+      tuned for short generic copy. **Reworded** from "This category has
+      transactions or recurring expenses linked to it. Delete those
+      first." to "This category still has transactions or recurring
+      expenses linked to it — delete those first." (leads with "still
+      has" to read as a direct answer to "why can't I delete this",
+      one clause via em dash instead of two flat sentences). **Toast text
+      now justified**: `Toast.tsx`'s text style gained `alignSelf:
+      'stretch'` + `textAlign: 'justify'` so a wrapped multi-line message
+      reads with even line edges instead of ragged-right — a shared
+      component change, so it applies to every toast in the app, not just
+      this one. 402 tests total across 41 suites (no new tests; only the
+      two hardcoded message-text assertions in `edit-category.test.tsx`
+      needed updating for the reworded copy).
+- [x] Recurring expenses now keep their category's own `monthlyBudgetCents`
+      in sync, client-side only (no backend change — the user explicitly
+      asked for the FE-only route if it was simpler, and it was: both
+      `createRecurringExpense`'s existing `categoryMonthlyBudgetCents`
+      param and `updateCategoryMonthBudget` already covered everything
+      needed). New shared helper `syncCategoryMonthBudget` (`src/lib/`)
+      takes the current `categoryMonths` list, a `categoryId`, and a
+      `deltaCents`, and — best-effort, swallowing its own errors since the
+      primary action has already saved by the time it runs — adds that
+      delta onto the matching category's existing budget (clamped at 0),
+      or no-ops if that category has no budget row this month yet (a
+      fresh activation) rather than guessing what it should start at.
+      Wired into three call sites: **create** (`add-recurring-expense.tsx`)
+      adds the new bill's full amount; **edit**
+      (`edit-recurring-expense.tsx`) applies the amount delta onto the
+      same category when the category didn't change, or moves the full
+      old/new amounts between the old and new category when it did (two
+      calls, not one delta, since they're two different budget rows);
+      **delete** subtracts the bill's amount back out. Explicitly scoped
+      down per the user's own correction mid-build: no attempt to solve
+      the "category not yet active this month, but has budget history in
+      some other month" edge case (would need an extra query to know what
+      that inherited value even is) — and no protection against a
+      concurrent manual budget edit in `edit-category.tsx` clobbering or
+      being clobbered by this, since the user was explicit that a
+      deliberate manual edit should just win, full stop. 415 tests total
+      across 42 suites (6 new for `syncCategoryMonthBudget` itself, 3 for
+      the create-screen integration, 4 for the edit-screen integration).
+- [x] Follow-up to the above, per explicit user request: `edit-category.tsx`
+      now enforces a **hard minimum** on a category's budget equal to its
+      `recurringCommittedCents` (grilled the user on soft-hint-only vs.
+      hard-floor first — they picked hard floor). `CategoryMonth.recurringCommittedCents`
+      is threaded as a new `recurringCommittedCents` route param from both
+      of `index.tsx`'s `/edit-category` navigations (Available and Income
+      tabs — always 0 for Income, since recurring expenses are
+      expense-only). On the edit screen: clearing the amount field now
+      shows that minimum as a gray placeholder (not `"0"`) and — if
+      confirmed while still blank — submits that exact value, same
+      "the placeholder is a real, submittable default" pattern as
+      due-day elsewhere; `canSubmit` now also requires the effective
+      amount to be `>=` the minimum, so typing something lower disables
+      Confirm; a red hint line ("Minimum €X.XX — already committed to
+      recurring expenses this month", styled with the same
+      `colors.button.deleteBackground` red already used for this
+      screen's inline error text) shows underneath whenever the minimum
+      is above 0. 421 tests total across 42 suites (6 new for this
+      screen, 2 existing `index.test.tsx` navigation-param assertions
+      updated for the new param).
+- [x] Two unrelated small fixes from the running app. **Deleting an Income
+      category with a received transaction was blocked** the same way an
+      Expense category with real transactions is (`CATEGORY_MONTH_HAS_TRANSACTIONS`)
+      -- explicit user call that this is wrong for Income specifically: an
+      income category's transactions are only ever the "received" entries
+      its own row creates (see `index.tsx`'s `handleToggleIncomeReceived`),
+      not independent spending history worth protecting, so there's no
+      reason to force the user to unmark it received first. `index.tsx`'s
+      two `/edit-category` navigations now also pass a `transactionIds`
+      param (JSON array, mirroring `edit-recurring-expense.tsx`'s own
+      pattern); `edit-category.tsx`'s delete handler, when `isIncome` and
+      that list isn't empty, deletes every one of them first (allSettled,
+      so a partial failure surfaces as an error instead of silently
+      leaving some deleted) and only then calls `removeCategoryFromMonth`
+      -- Expense categories are untouched, still blocked+toasted exactly
+      as before. **Available tab wasn't sorted** -- rows rendered in
+      whatever order `categoryMonths` happened to return, not a
+      meaningful order for a user to scan. Sorted alphabetically by
+      category name client-side (`[...data].sort((a, b) =>
+      a.category.name.localeCompare(b.category.name))`), same convention
+      `ExistingCategoryPicker.tsx` already established. Income tab is
+      unaffected (not asked for, scoped to "the available menu" per the
+      user's own wording). 426 tests total across 42 suites (4 new for
+      the income-delete-cascade, 1 new for the sort, regression-shaped
+      since the fixture's insertion order and alphabetical order
+      deliberately differ).
+- [x] `pr-reviewer` pass on the branch, three real findings fixed. **Cascade
+      -delete retry could get permanently stuck**: `edit-category.tsx`'s
+      income transaction-delete list was parsed once from route params
+      and never updated, so a partial failure meant every retry re-sent
+      the *full original* id list, including ones already deleted (which
+      fail "not found" forever) — the category became undeletable from
+      that screen instance without backing out and re-swiping in for
+      fresh params. Fixed by tracking the pending ids as state
+      (`pendingTransactionIds`) that shrinks to only the ones that
+      actually failed after each attempt. **`edit-recurring-expense.tsx`'s
+      local `selectedCategory.name` was wrong** — built from `params.name`
+      (the recurring expense's own name, e.g. "Water"), not the
+      category's name (e.g. "Shopping"); there was no `categoryName` param
+      at all. Harmless today (nothing reads `.name` off it before the
+      user re-picks a real category), but a landmine for the next feature
+      that does. Fixed by threading a new `categoryName` param from
+      `index.tsx`. **Marking paid used the live, unconfirmed amount
+      field** instead of the row's last-saved `amountCents` — editing the
+      amount and tapping the Paid pill without pressing Confirm first
+      created a transaction against the *new* typed amount while the
+      server's `paidThisMonth` check still compares against the *old*
+      stored amount, so a lower typed value could create a transaction
+      that doesn't actually clear the stored threshold, silently failing
+      to flip the row to Paid. Fixed by always using `Number(params.amountCents)`
+      for `markRecurringPaid` — the Paid pill now acts on the last-saved
+      amount regardless of any in-progress, unconfirmed edit, matching
+      how the rest of this app treats Confirm as the only thing that
+      persists an edit. (A fourth finding, nitpick-level, was about
+      `syncCategoryMonthBudget`'s best-effort drift being self-correcting
+      via the hard-minimum floor — no fix needed, already the documented
+      tradeoff.) 428 tests total across 42 suites (3 new: retry-only-
+      failed-ids, the Paid-pill-uses-saved-amount case, plus 4 existing
+      navigation-param assertions updated for the new `categoryName` param).
+      Also fixed a trivial stale-comment nitpick from that same review pass
+      (two comments still said `filterUnusedExpenseCategories`, the old
+      name before that helper was generalized with a `direction` param).
+- [x] `test-auditor` pass on the branch, three real gaps fixed. **Weak
+      placeholder-color assertion**: `edit-category.test.tsx`'s "clearing
+      the amount shows the recurring-expense total as a gray placeholder"
+      test only checked `color` wasn't `undefined` — passes even if the
+      wrong color were wired up. Now compares against the real
+      `lightColors.text.placeholder`/`lightColors.text.primary` values
+      (imported from `src/theme/colors.ts`), and also asserts the color
+      switches back to primary once a real digit is typed. **Missing
+      decimal-point coverage on the edit screen**: `add-recurring-expense.test.tsx`
+      already tested the decimal key being a no-op in day-entry mode;
+      `edit-recurring-expense.test.tsx` had no decimal-point test at all,
+      for either day-entry-mode (no-op) or amount-mode (first-touch
+      replaces the pre-filled value) — both added, mirroring the sibling
+      screen's test and `edit-category.test.tsx`'s equivalent pattern.
+      **`add-income.tsx` allows a €0 budget with no test proving it's
+      intentional**: `canSubmit` there never checks amount > 0, which
+      looked like a possible gap in isolation — traced it against
+      `add-category.tsx` (`canSubmit` there is byte-for-byte the same
+      shape, no amount check either) and confirmed this is deliberate,
+      pre-existing, app-wide behavior for *category* creation specifically
+      (a €0 placeholder budget to fill in later), distinct from recurring
+      expenses (`add-recurring-expense.tsx`), which do require amount > 0
+      since a €0 bill makes no sense. No behavior changed — added a test
+      documenting/locking in the €0-is-allowed case instead. (Two other
+      findings were noted but not acted on: hook-level `invalidateQueries`
+      sets in `recurringExpenseMutations.ts`/`categoryMutations.ts` have
+      zero direct test coverage, but that's a pre-existing, repo-wide
+      convention predating this PR, not something to unilaterally change;
+      and the `categoryName` param fix from the prior round has no
+      observable regression test since nothing in the screen currently
+      reads `selectedCategory.name` — correctly flagged as "nothing to
+      assert on yet" rather than a real gap.) 431 tests total across 42
+      suites (3 new).
 
 **Scaffold caveats worth knowing before the next `npm install` in this
 repo** (SDK 57 is very new — pin these deliberately, don't let npm grab

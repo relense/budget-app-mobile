@@ -11,20 +11,27 @@ import {
   useRecurringExpenses,
   useTransactions,
 } from '../../src/api/budgetHomeQueries';
+import {
+  useMarkRecurringPaid,
+  useUnmarkRecurringPaid,
+} from '../../src/api/recurringExpenseMutations';
+import { useCreateTransaction, useDeleteTransaction } from '../../src/api/transactionMutations';
+import type { CategoryMonth, RecurringExpense } from '../../src/api/types';
 import { useAuth } from '../../src/auth/AuthContext';
 import { AddRow } from '../../src/components/AddRow';
 import { CategoryIcon } from '../../src/components/CategoryIcon';
 import { ListRow } from '../../src/components/ListRow';
 import { RetryableError } from '../../src/components/RetryableError';
 import { SwipeableRow } from '../../src/components/SwipeableRow';
+import { Toast } from '../../src/components/Toast';
 import {
-  mostRecentDate,
   sumActualCents,
   sumAvailableBudgetedCents,
   sumRecurringCents,
 } from '../../src/lib/budgetHomeCalculations';
 import { formatCents } from '../../src/lib/formatCents';
 import { formatDate, formatMonthLabel } from '../../src/lib/formatDate';
+import { todayIsoDate } from '../../src/lib/today';
 import { useTheme } from '../../src/theme/ThemeProvider';
 
 type Tab = 'AVAILABLE' | 'EXPENSES' | 'RECURRENT' | 'INCOME';
@@ -64,6 +71,9 @@ const TAB_LOAD_ERRORS: Record<Tab, string> = {
   INCOME: "Couldn't load your income.",
 };
 
+const TOAST_DURATION_MS = 2500;
+const GENERIC_ERROR_MESSAGE = 'Something went wrong. Please try again.';
+
 // Bottom nav is drawn for visual completeness (matches the mockups) but isn't real navigation
 // yet -- only this screen was in scope for this pass, see docs/PROGRESS-MOBILE.md.
 const BOTTOM_NAV_ICONS = [
@@ -87,10 +97,22 @@ export default function HomeScreen() {
   // into each row's key below, so a row left swiped-open resets to closed instantly on remount
   // instead of via an animated close that could be seen racing the screen transition.
   const [listResetKey, setListResetKey] = useState(0);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   useEffect(() => {
     return navigation.addListener('focus', () => setListResetKey((key) => key + 1));
   }, [navigation]);
+
+  useEffect(() => {
+    if (!toastMessage) return;
+    const timer = setTimeout(() => setToastMessage(null), TOAST_DURATION_MS);
+    return () => clearTimeout(timer);
+  }, [toastMessage]);
+
+  const markRecurringPaid = useMarkRecurringPaid();
+  const unmarkRecurringPaid = useUnmarkRecurringPaid();
+  const createTransaction = useCreateTransaction();
+  const deleteTransaction = useDeleteTransaction();
 
   const currentMonthQuery = useCurrentMonth();
   const month = currentMonthQuery.data?.month;
@@ -142,9 +164,69 @@ export default function HomeScreen() {
           ? recurringExpenses
           : incomeCategoryMonths;
 
+  // Tapping a Recurrent row's icon toggles paid state directly, both directions. Unpaid->paid:
+  // one plain full-amount transaction dated today -- no amount/date adjustment, no
+  // split-payment support yet (that's deferred, see PROGRESS-MOBILE.md). Paid->unpaid: deletes
+  // every transaction linked to it this month (same no-backend-unmark workaround as the
+  // swipe-to-edit drawer's Paid/Unpaid pill -- reuses the same useUnmarkRecurringPaid hook, so
+  // the ['recurringExpenses'] invalidation this needs isn't duplicated).
+  async function handleToggleIconPaid(re: RecurringExpense) {
+    try {
+      if (re.paidThisMonth) {
+        await unmarkRecurringPaid.mutateAsync(re.transactions.map((t) => t.id));
+      } else {
+        await markRecurringPaid.mutateAsync({
+          recurringExpenseId: re.id,
+          amountCents: re.amountCents,
+          date: todayIsoDate(),
+        });
+      }
+    } catch {
+      setToastMessage(GENERIC_ERROR_MESSAGE);
+    }
+  }
+
+  // Tapping an Income row toggles received state directly, both directions -- no separate
+  // screen. "Received" has no stored field (see docs/PLAN.md): derived the same way the row's
+  // own amount already is, actualAmountCents > 0. Not received -> received: a plain Transaction
+  // for the expected amount, dated today, direction server-derived as INCOME from the row's own
+  // (income-direction) category -- same mechanism as every other transaction in this app, just
+  // via useCreateTransaction directly rather than a dedicated recurring-style hook, since income
+  // has no separate entity to keep in sync (useDeleteTransaction already invalidates
+  // ['categoryMonths'], which is all "received" is derived from). Received -> not received:
+  // deletes every transaction linked to this CategoryMonth this month; allSettled (not all) so a
+  // partial failure still surfaces as an error instead of silently leaving some deleted.
+  async function handleToggleIncomeReceived(cm: CategoryMonth) {
+    const received = cm.actualAmountCents > 0;
+    try {
+      if (received) {
+        const results = await Promise.allSettled(
+          cm.transactions.map((t) => deleteTransaction.mutateAsync({ transactionId: t.id })),
+        );
+        if (results.some((r) => r.status === 'rejected')) {
+          setToastMessage(GENERIC_ERROR_MESSAGE);
+        }
+      } else {
+        await createTransaction.mutateAsync({
+          categoryMonthId: cm.id,
+          amountCents: cm.monthlyBudgetCents,
+          date: todayIsoDate(),
+          merchant: null,
+        });
+      }
+    } catch {
+      setToastMessage(GENERIC_ERROR_MESSAGE);
+    }
+  }
+
   function renderRows() {
     if (tab === 'AVAILABLE') {
-      return (expenseCategoryMonths.data ?? []).map((cm) => (
+      // Sorted alphabetically by category name -- the query itself returns whatever order the
+      // backend happens to return them in, not a meaningful one for a user to scan.
+      const sortedCategoryMonths = [...(expenseCategoryMonths.data ?? [])].sort((a, b) =>
+        a.category.name.localeCompare(b.category.name),
+      );
+      return sortedCategoryMonths.map((cm) => (
         <SwipeableRow
           key={`${cm.id}-${listResetKey}`}
           testID={`swipe-edit-action-${cm.id}`}
@@ -160,6 +242,7 @@ export default function HomeScreen() {
                 budgetType: cm.category.budgetType ?? '',
                 direction: cm.category.direction,
                 monthlyBudgetCents: String(cm.monthlyBudgetCents),
+                recurringCommittedCents: String(cm.recurringCommittedCents),
               },
             })
           }
@@ -207,38 +290,92 @@ export default function HomeScreen() {
     }
     if (tab === 'RECURRENT') {
       return (recurringExpenses.data ?? []).map((re) => {
-        const date = mostRecentDate(re.transactions);
         return (
-          <ListRow
-            key={re.id}
-            icon={
-              re.paidThisMonth ? (
-                <MaterialCommunityIcons name="check" size={20} color={colors.status.paid.text} />
-              ) : (
-                <CategoryIcon name={re.category.icon} color={colors.text.primary} />
-              )
+          <SwipeableRow
+            key={`${re.id}-${listResetKey}`}
+            testID={`swipe-edit-action-${re.id}`}
+            onEdit={() =>
+              router.push({
+                pathname: '/edit-recurring-expense',
+                params: {
+                  recurringExpenseId: re.id,
+                  name: re.name,
+                  amountCents: String(re.amountCents),
+                  categoryId: re.category.id,
+                  categoryName: re.category.name,
+                  categoryIcon: re.category.icon,
+                  categoryColor: re.category.color,
+                  budgetType: re.budgetType,
+                  dueDay: String(re.dueDay),
+                  paidThisMonth: String(re.paidThisMonth),
+                  transactionIds: JSON.stringify(re.transactions.map((t) => t.id)),
+                },
+              })
             }
-            circleColor={re.paidThisMonth ? colors.status.paid.background : re.category.color}
-            title={re.name}
-            subtitle={re.paidThisMonth ? (date ? formatDate(date) : 'Paid') : 'Unpaid'}
-            amountText={formatCents(re.amountCents)}
-          />
+          >
+            <ListRow
+              icon={
+                re.paidThisMonth ? (
+                  <MaterialCommunityIcons name="check" size={20} color={colors.status.paid.text} />
+                ) : (
+                  <CategoryIcon name={re.category.icon} color={colors.text.primary} />
+                )
+              }
+              circleColor={re.paidThisMonth ? colors.status.paid.background : re.category.color}
+              title={re.name}
+              subtitle={formatDate(re.dueDate)}
+              amountText={formatCents(re.amountCents)}
+              secondaryAmountText={re.paidThisMonth ? 'Paid' : 'Unpaid'}
+              // Toggles both directions -- see handleToggleIconPaid.
+              onIconPress={() => handleToggleIconPaid(re)}
+              iconTestID={`pay-icon-${re.id}`}
+            />
+          </SwipeableRow>
         );
       });
     }
     // INCOME
     return (incomeCategoryMonths.data ?? []).map((cm) => {
-      const date = mostRecentDate(cm.transactions);
+      const received = cm.actualAmountCents > 0;
       return (
-        <ListRow
-          key={cm.id}
-          icon={<CategoryIcon name={cm.category.icon} color={colors.text.primary} />}
-          circleColor={cm.category.color}
-          title={cm.category.name}
-          subtitle={date ? formatDate(date) : undefined}
-          amountText={formatCents(cm.actualAmountCents)}
-          secondaryAmountText={formatCents(cm.monthlyBudgetCents)}
-        />
+        <SwipeableRow
+          key={`${cm.id}-${listResetKey}`}
+          testID={`swipe-edit-action-${cm.id}`}
+          onEdit={() =>
+            router.push({
+              pathname: '/edit-category',
+              params: {
+                categoryMonthId: cm.id,
+                categoryId: cm.category.id,
+                name: cm.category.name,
+                icon: cm.category.icon,
+                color: cm.category.color,
+                budgetType: cm.category.budgetType ?? '',
+                direction: cm.category.direction,
+                monthlyBudgetCents: String(cm.monthlyBudgetCents),
+                recurringCommittedCents: String(cm.recurringCommittedCents),
+                // Only meaningful for Income (see edit-category.tsx's delete handling) -- an
+                // income category's transactions are only ever its own "received" entries, so
+                // deleting the category can take them with it instead of blocking the user.
+                transactionIds: JSON.stringify(cm.transactions.map((t) => t.id)),
+              },
+            })
+          }
+        >
+          <Pressable
+            testID={`income-row-${cm.id}`}
+            onPress={() => handleToggleIncomeReceived(cm)}
+          >
+            <ListRow
+              icon={<CategoryIcon name={cm.category.icon} color={colors.text.primary} />}
+              circleColor={cm.category.color}
+              title={cm.category.name}
+              subtitle={received ? 'Received' : 'Not received'}
+              amountText={formatCents(cm.actualAmountCents)}
+              secondaryAmountText={formatCents(cm.monthlyBudgetCents)}
+            />
+          </Pressable>
+        </SwipeableRow>
       );
     });
   }
@@ -350,8 +487,12 @@ export default function HomeScreen() {
         {tab === 'AVAILABLE' ? (
           <AddRow label="New Category" onPress={() => router.push('/add-category')} />
         ) : null}
-        {tab === 'RECURRENT' ? <AddRow label="New recurrent expense" /> : null}
-        {tab === 'INCOME' ? <AddRow label="New income" /> : null}
+        {tab === 'RECURRENT' ? (
+          <AddRow label="New recurrent expense" onPress={() => router.push('/add-recurring-expense')} />
+        ) : null}
+        {tab === 'INCOME' ? (
+          <AddRow label="New income" onPress={() => router.push('/add-income')} />
+        ) : null}
 
         {/* Every tab body query is gated on `month` being known (`enabled: !!month` in
             budgetHomeQueries.ts), so while currentMonth is loading or failed, activeQuery is
@@ -414,6 +555,8 @@ export default function HomeScreen() {
           );
         })}
       </View>
+
+      <Toast message={toastMessage} />
     </View>
   );
 }

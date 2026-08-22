@@ -11,15 +11,19 @@ const SELECTED_OUTLINE_COLOR = '#4D4D4D';
 export function IconPicker({
   selectedIcon,
   onSelect,
+  // Defaults to the expense palette so add-category.tsx's existing call site needs no change --
+  // add-income.tsx passes INCOME_ICON_PALETTE explicitly.
+  palette = EXPENSE_ICON_PALETTE,
 }: {
   selectedIcon: string;
   onSelect: (icon: string) => void;
+  palette?: { icon: string; color: string }[];
 }) {
   const { colors } = useTheme();
 
   return (
-    <View style={styles.grid}>
-      {EXPENSE_ICON_PALETTE.map(({ icon, color }) => {
+    <View testID="icon-picker-grid" style={styles.grid}>
+      {palette.map(({ icon, color }) => {
         const selected = icon === selectedIcon;
         return (
           <Pressable
@@ -48,6 +52,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 12,
+    // Left-aligned rows left a ragged, sometimes wide gap on the right whenever a row of icons
+    // didn't exactly fill the container's width -- centering distributes that leftover space
+    // evenly instead, so a partially-filled last row still reads as intentional, not a mistake.
+    justifyContent: 'center',
   },
   circle: {
     width: 44,

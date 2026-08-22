@@ -13,13 +13,23 @@ import {
   useRecurringExpenses,
   useTransactions,
 } from '../../../src/api/budgetHomeQueries';
+import {
+  useMarkRecurringPaid,
+  useUnmarkRecurringPaid,
+} from '../../../src/api/recurringExpenseMutations';
+import { useCreateTransaction, useDeleteTransaction } from '../../../src/api/transactionMutations';
 import { useAuth } from '../../../src/auth/AuthContext';
 import { ThemeProvider } from '../../../src/theme/ThemeProvider';
 import { router } from 'expo-router';
 import HomeScreen from '../../../app/(app)/index';
 
 jest.mock('../../../src/api/budgetHomeQueries');
+jest.mock('../../../src/api/recurringExpenseMutations');
+jest.mock('../../../src/api/transactionMutations');
 jest.mock('../../../src/auth/AuthContext');
+jest.mock('../../../src/lib/today', () => ({
+  todayIsoDate: () => '2026-09-15',
+}));
 
 // HomeScreen is rendered directly here, outside a real NavigationContainer, so the
 // context-based `useNavigation` hook has nothing to attach to -- stub it with a no-op listener
@@ -57,8 +67,16 @@ const mockedUseCategoryMonths = useCategoryMonths as jest.Mock;
 const mockedUseRecurringExpenses = useRecurringExpenses as jest.Mock;
 const mockedUseTransactions = useTransactions as jest.Mock;
 const mockedUseBankBalance = useBankBalance as jest.Mock;
+const mockedUseMarkRecurringPaid = useMarkRecurringPaid as jest.Mock;
+const mockedUseUnmarkRecurringPaid = useUnmarkRecurringPaid as jest.Mock;
+const mockedUseCreateTransaction = useCreateTransaction as jest.Mock;
+const mockedUseDeleteTransaction = useDeleteTransaction as jest.Mock;
 const mockedUseAuth = useAuth as jest.Mock;
 const mockSignOut = jest.fn();
+const markRecurringPaidMutateAsync = jest.fn();
+const unmarkRecurringPaidMutateAsync = jest.fn();
+const createTransactionMutateAsync = jest.fn();
+const deleteTransactionMutateAsync = jest.fn();
 
 const idle = { data: undefined, isLoading: false, isError: false, refetch: jest.fn() };
 
@@ -112,7 +130,30 @@ const incomeCategoryMonths = [
       budgetType: null,
       direction: 'INCOME',
     },
-    transactions: [{ date: '2026-09-01' }],
+    transactions: [{ id: 't-obconnect-1', date: '2026-09-01' }],
+  },
+  // A second row with its own distinct, non-empty transaction ids -- so a regression that
+  // maps every row to the first row's transactions (e.g. reusing incomeCategoryMonths[0]
+  // instead of the row actually being rendered) is reachable by these tests, not just a
+  // single-row fixture where there's nothing to confuse it with.
+  {
+    id: 'cm-randstad',
+    month: '2026-09',
+    monthlyBudgetCents: 435708,
+    actualAmountCents: 333450,
+    recurringCommittedCents: 0,
+    category: {
+      id: 'c-randstad',
+      name: 'Randstad',
+      icon: 'briefcase',
+      color: '#F7D6DE',
+      budgetType: null,
+      direction: 'INCOME',
+    },
+    transactions: [
+      { id: 't-randstad-1', date: '2026-09-01' },
+      { id: 't-randstad-2', date: '2026-09-10' },
+    ],
   },
 ];
 
@@ -124,6 +165,7 @@ const recurringExpenses = [
     amountCents: 2196,
     budgetType: 'NEED',
     dueDay: 10,
+    dueDate: '2026-09-10',
     paidThisMonth: false,
     category: {
       id: 'c-shopping',
@@ -134,6 +176,27 @@ const recurringExpenses = [
       direction: 'EXPENSE',
     },
     transactions: [],
+  },
+  // Same reasoning as cm-randstad above -- a second row with distinct, non-empty
+  // transaction ids of its own.
+  {
+    id: 're-internet',
+    month: '2026-09',
+    name: 'Internet',
+    amountCents: 5051,
+    budgetType: 'NEED',
+    dueDay: 12,
+    dueDate: '2026-09-12',
+    paidThisMonth: true,
+    category: {
+      id: 'c-shopping',
+      name: 'Shopping',
+      icon: 'cart',
+      color: '#4C6EF5',
+      budgetType: 'NEED',
+      direction: 'EXPENSE',
+    },
+    transactions: [{ id: 't-internet-1', date: '2026-09-12' }],
   },
 ];
 
@@ -189,6 +252,26 @@ beforeEach(() => {
       checkpointSetAt: '2026-01-01T00:00:00.000Z',
     },
   });
+  markRecurringPaidMutateAsync.mockResolvedValue(undefined);
+  mockedUseMarkRecurringPaid.mockReturnValue({
+    mutateAsync: markRecurringPaidMutateAsync,
+    isPending: false,
+  });
+  unmarkRecurringPaidMutateAsync.mockResolvedValue(undefined);
+  mockedUseUnmarkRecurringPaid.mockReturnValue({
+    mutateAsync: unmarkRecurringPaidMutateAsync,
+    isPending: false,
+  });
+  createTransactionMutateAsync.mockResolvedValue(undefined);
+  mockedUseCreateTransaction.mockReturnValue({
+    mutateAsync: createTransactionMutateAsync,
+    isPending: false,
+  });
+  deleteTransactionMutateAsync.mockResolvedValue(undefined);
+  mockedUseDeleteTransaction.mockReturnValue({
+    mutateAsync: deleteTransactionMutateAsync,
+    isPending: false,
+  });
 });
 
 describe('HomeScreen', () => {
@@ -210,6 +293,18 @@ describe('HomeScreen', () => {
     // Just the "Available" tab label itself now -- each row's own subtitle reads "Budget".
     expect(screen.getAllByText('Available')).toHaveLength(1);
     expect(screen.getAllByText('Budget')).toHaveLength(2);
+  });
+
+  it('sorts the Available tab\'s categories alphabetically by name, regardless of query order', async () => {
+    // Fixture order is Shopping then Eating Out -- alphabetical order flips that, so this
+    // actually catches a regression rather than passing by coincidence.
+    await renderHomeScreen();
+
+    const rows = screen.getAllByTestId(/^swipe-edit-action-cm-(shopping|eating-out)$/);
+    expect(rows.map((row) => row.props.testID)).toEqual([
+      'swipe-edit-action-cm-eating-out',
+      'swipe-edit-action-cm-shopping',
+    ]);
   });
 
   it("shows each category's amount spent so far as the headline figure, with its total budget in gray underneath", async () => {
@@ -275,6 +370,7 @@ describe('HomeScreen', () => {
         budgetType: 'NEED',
         direction: 'EXPENSE',
         monthlyBudgetCents: '70000',
+        recurringCommittedCents: '0',
       },
     });
   });
@@ -326,6 +422,60 @@ describe('HomeScreen', () => {
     expect(screen.getByText('Unpaid')).toBeTruthy();
   });
 
+  it('shows the real computed due date under the name and Paid/Unpaid under the amount for every Recurrent row', async () => {
+    await renderHomeScreen();
+
+    await fireEvent.press(screen.getByText('Recurrent'));
+
+    expect(screen.getByText('10 September 2026')).toBeTruthy();
+    expect(screen.getByText('12 September 2026')).toBeTruthy();
+    expect(screen.getByText('Unpaid')).toBeTruthy();
+    expect(screen.getByText('Paid')).toBeTruthy();
+  });
+
+  it('tapping the icon on an Unpaid Recurrent row marks it paid with the row\'s own amount, dated today', async () => {
+    await renderHomeScreen();
+
+    await fireEvent.press(screen.getByText('Recurrent'));
+    await fireEvent.press(screen.getByTestId('pay-icon-re-water'));
+
+    expect(markRecurringPaidMutateAsync).toHaveBeenCalledWith({
+      recurringExpenseId: 're-water',
+      amountCents: 2196,
+      date: '2026-09-15',
+    });
+  });
+
+  it('tapping the icon on a Paid Recurrent row unmarks it, deleting every linked transaction', async () => {
+    await renderHomeScreen();
+
+    await fireEvent.press(screen.getByText('Recurrent'));
+    await fireEvent.press(screen.getByTestId('pay-icon-re-internet'));
+
+    expect(unmarkRecurringPaidMutateAsync).toHaveBeenCalledWith(['t-internet-1']);
+    expect(markRecurringPaidMutateAsync).not.toHaveBeenCalled();
+  });
+
+  it('shows a toast and does not crash when marking paid from the icon fails', async () => {
+    markRecurringPaidMutateAsync.mockRejectedValue(new Error('network error'));
+
+    await renderHomeScreen();
+    await fireEvent.press(screen.getByText('Recurrent'));
+    await fireEvent.press(screen.getByTestId('pay-icon-re-water'));
+
+    expect(await screen.findByText('Something went wrong. Please try again.')).toBeTruthy();
+  });
+
+  it('shows a toast and does not crash when unmarking paid from the icon fails', async () => {
+    unmarkRecurringPaidMutateAsync.mockRejectedValue(new Error('network error'));
+
+    await renderHomeScreen();
+    await fireEvent.press(screen.getByText('Recurrent'));
+    await fireEvent.press(screen.getByTestId('pay-icon-re-internet'));
+
+    expect(await screen.findByText('Something went wrong. Please try again.')).toBeTruthy();
+  });
+
   it('switches to the Income tab and shows both actual and expected amounts', async () => {
     await renderHomeScreen();
 
@@ -335,6 +485,184 @@ describe('HomeScreen', () => {
     expect(screen.getByText('Obconnect')).toBeTruthy();
     expect(screen.getByText('€3,686.00')).toBeTruthy();
     expect(screen.getByText('€4,300.00')).toBeTruthy();
+  });
+
+  it('navigates to Add Recurring Expense when "New recurrent expense" is pressed', async () => {
+    await renderHomeScreen();
+
+    await fireEvent.press(screen.getByText('Recurrent'));
+    await fireEvent.press(screen.getByText('New recurrent expense'));
+
+    expect(mockedRouterPush).toHaveBeenCalledWith('/add-recurring-expense');
+  });
+
+  it('navigates to Edit Recurring Expense, with the right params, when a Recurrent row is swipe-edited', async () => {
+    await renderHomeScreen();
+
+    await fireEvent.press(screen.getByText('Recurrent'));
+    await fireEvent.press(screen.getByTestId('swipe-edit-action-re-water'));
+
+    expect(mockedRouterPush).toHaveBeenCalledWith({
+      pathname: '/edit-recurring-expense',
+      params: {
+        recurringExpenseId: 're-water',
+        name: 'Water',
+        amountCents: '2196',
+        categoryId: 'c-shopping',
+        categoryName: 'Shopping',
+        categoryIcon: 'cart',
+        categoryColor: '#4C6EF5',
+        budgetType: 'NEED',
+        dueDay: '10',
+        paidThisMonth: 'false',
+        transactionIds: '[]',
+      },
+    });
+  });
+
+  it('navigates to Add Income when "New income" is pressed', async () => {
+    await renderHomeScreen();
+
+    await fireEvent.press(screen.getByText('Income'));
+    await fireEvent.press(screen.getByText('New income'));
+
+    expect(mockedRouterPush).toHaveBeenCalledWith('/add-income');
+  });
+
+  it('navigates to Edit Category, with the right params, when an Income row is swipe-edited', async () => {
+    await renderHomeScreen();
+
+    await fireEvent.press(screen.getByText('Income'));
+    await fireEvent.press(screen.getByTestId('swipe-edit-action-cm-obconnect'));
+
+    expect(mockedRouterPush).toHaveBeenCalledWith({
+      pathname: '/edit-category',
+      params: {
+        categoryMonthId: 'cm-obconnect',
+        categoryId: 'c-obconnect',
+        name: 'Obconnect',
+        icon: 'briefcase',
+        color: '#2F9E44',
+        budgetType: '',
+        direction: 'INCOME',
+        monthlyBudgetCents: '430000',
+        recurringCommittedCents: '0',
+        transactionIds: '["t-obconnect-1"]',
+      },
+    });
+  });
+
+  it('shows Received/Not received under the name instead of a date', async () => {
+    await renderHomeScreen();
+
+    await fireEvent.press(screen.getByText('Income'));
+
+    // Both fixture rows have actualAmountCents > 0.
+    expect(screen.getAllByText('Received')).toHaveLength(2);
+    expect(screen.queryByText('Not received')).toBeNull();
+  });
+
+  it('tapping an already-Received Income row unmarks it by deleting every linked transaction, using that row\'s own ids (not another row\'s)', async () => {
+    await renderHomeScreen();
+
+    await fireEvent.press(screen.getByText('Income'));
+    await fireEvent.press(screen.getByTestId('income-row-cm-randstad'));
+
+    expect(deleteTransactionMutateAsync).toHaveBeenCalledWith({ transactionId: 't-randstad-1' });
+    expect(deleteTransactionMutateAsync).toHaveBeenCalledWith({ transactionId: 't-randstad-2' });
+    expect(deleteTransactionMutateAsync).not.toHaveBeenCalledWith({
+      transactionId: 't-obconnect-1',
+    });
+    expect(createTransactionMutateAsync).not.toHaveBeenCalled();
+  });
+
+  it('tapping a Not-received Income row creates one transaction on that row\'s own categoryMonthId, for the expected amount, dated today', async () => {
+    mockedUseCategoryMonths.mockImplementation((_month: string, direction: string) => ({
+      ...idle,
+      data:
+        direction === 'EXPENSE'
+          ? expenseCategoryMonths
+          : [{ ...incomeCategoryMonths[0], actualAmountCents: 0, transactions: [] }],
+    }));
+
+    await renderHomeScreen();
+    await fireEvent.press(screen.getByText('Income'));
+
+    expect(screen.getByText('Not received')).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('income-row-cm-obconnect'));
+
+    expect(createTransactionMutateAsync).toHaveBeenCalledWith({
+      categoryMonthId: 'cm-obconnect',
+      amountCents: 430000,
+      date: '2026-09-15',
+      merchant: null,
+    });
+    expect(deleteTransactionMutateAsync).not.toHaveBeenCalled();
+  });
+
+  it('shows a toast when marking an income received fails', async () => {
+    mockedUseCategoryMonths.mockImplementation((_month: string, direction: string) => ({
+      ...idle,
+      data:
+        direction === 'EXPENSE'
+          ? expenseCategoryMonths
+          : [{ ...incomeCategoryMonths[0], actualAmountCents: 0, transactions: [] }],
+    }));
+    createTransactionMutateAsync.mockRejectedValue(new Error('network error'));
+
+    await renderHomeScreen();
+    await fireEvent.press(screen.getByText('Income'));
+    await fireEvent.press(screen.getByTestId('income-row-cm-obconnect'));
+
+    expect(await screen.findByText('Something went wrong. Please try again.')).toBeTruthy();
+  });
+
+  it('shows a toast when only some linked transactions fail to delete while unmarking an income received (partial clear)', async () => {
+    deleteTransactionMutateAsync
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('network error'));
+
+    await renderHomeScreen();
+    await fireEvent.press(screen.getByText('Income'));
+    await fireEvent.press(screen.getByTestId('income-row-cm-randstad'));
+
+    expect(await screen.findByText('Something went wrong. Please try again.')).toBeTruthy();
+  });
+
+  it('maps each Income row to its own transaction ids, not the first row\'s (swipe-edit)', async () => {
+    await renderHomeScreen();
+
+    await fireEvent.press(screen.getByText('Income'));
+    await fireEvent.press(screen.getByTestId('swipe-edit-action-cm-randstad'));
+
+    expect(mockedRouterPush).toHaveBeenCalledWith({
+      pathname: '/edit-category',
+      params: expect.objectContaining({ categoryMonthId: 'cm-randstad', categoryId: 'c-randstad' }),
+    });
+  });
+
+  it('maps each Recurrent row to its own transaction ids, not the first row\'s (swipe-edit)', async () => {
+    await renderHomeScreen();
+
+    await fireEvent.press(screen.getByText('Recurrent'));
+    await fireEvent.press(screen.getByTestId('swipe-edit-action-re-internet'));
+
+    expect(mockedRouterPush).toHaveBeenCalledWith({
+      pathname: '/edit-recurring-expense',
+      params: {
+        recurringExpenseId: 're-internet',
+        name: 'Internet',
+        amountCents: '5051',
+        categoryId: 'c-shopping',
+        categoryName: 'Shopping',
+        categoryIcon: 'cart',
+        categoryColor: '#4C6EF5',
+        budgetType: 'NEED',
+        dueDay: '12',
+        paidThisMonth: 'true',
+        transactionIds: '["t-internet-1"]',
+      },
+    });
   });
 
   it('opens the header metric menu and switches to Total Balance', async () => {
