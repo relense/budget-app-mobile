@@ -128,6 +128,17 @@ export default function AddTransactionScreen() {
     }
   }
 
+  // Confirm can be pressed while still in date mode (the user typed a day but didn't tap the
+  // calendar key to leave it) -- fall back to whatever's typed so far instead of silently
+  // discarding it in favor of the previously committed date.
+  function commitDate(): string {
+    if (dateMode && month) {
+      const iso = dayDigitsToIso(dayDigits, month);
+      if (iso) return iso;
+    }
+    return effectiveDate;
+  }
+
   async function handleConfirm() {
     if (!canSubmit || !selectedCategoryMonth) return;
 
@@ -135,7 +146,7 @@ export default function AddTransactionScreen() {
       await createTransaction.mutateAsync({
         categoryMonthId: selectedCategoryMonth.id,
         amountCents: amountTextToCents(amountText),
-        date: effectiveDate,
+        date: commitDate(),
         merchant: merchant.trim() || null,
       });
       router.back();

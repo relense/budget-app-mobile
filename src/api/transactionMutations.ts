@@ -36,8 +36,8 @@ export interface CreateTransactionInput {
 }
 
 // TransactionInput is a full replace, not a patch (same convention as CategoryInput, see
-// docs/PLAN.md) -- categoryMonthId must be resent even when only the amount/date/merchant
-// changed, since edit-transaction doesn't offer changing the category itself.
+// docs/PLAN.md) -- categoryMonthId must be resent even when it's unchanged, since
+// edit-transaction always sends the currently-selected category, changed or not.
 export interface UpdateTransactionInput {
   transactionId: string;
   categoryMonthId: string;

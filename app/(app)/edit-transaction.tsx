@@ -143,6 +143,17 @@ export default function EditTransactionScreen() {
     }
   }
 
+  // Confirm can be pressed while still in date mode (the user typed a day but didn't tap the
+  // calendar key to leave it) -- fall back to whatever's typed so far instead of silently
+  // discarding it in favor of the previously committed date.
+  function commitDate(): string {
+    if (dateMode && month) {
+      const iso = dayDigitsToIso(dayDigits, month);
+      if (iso) return iso;
+    }
+    return transactionDate;
+  }
+
   async function handleConfirm() {
     if (!canSubmit || !selectedCategoryMonth) return;
 
@@ -151,7 +162,7 @@ export default function EditTransactionScreen() {
         transactionId: params.transactionId,
         categoryMonthId: selectedCategoryMonth.id,
         amountCents: amountTextToCents(amountText),
-        date: transactionDate,
+        date: commitDate(),
         merchant: merchant.trim() || null,
       });
       router.back();
@@ -280,7 +291,13 @@ export default function EditTransactionScreen() {
 
         <Pressable
           testID="delete-transaction-button"
-          style={[styles.deleteButton, { backgroundColor: colors.button.deleteBackground }]}
+          style={[
+            styles.deleteButton,
+            {
+              backgroundColor: colors.button.deleteBackground,
+              opacity: deleteTransaction.isPending || updateTransaction.isPending ? 0.4 : 1,
+            },
+          ]}
           onPress={handleDeletePress}
           disabled={deleteTransaction.isPending || updateTransaction.isPending}
         >

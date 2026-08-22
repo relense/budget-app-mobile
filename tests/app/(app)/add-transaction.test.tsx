@@ -313,5 +313,41 @@ describe('AddTransactionScreen', () => {
 
       expect(screen.getByTestId('calculator-value').props.children).toBe('3 Sep 2026');
     });
+
+    it('commits the still-typed day if Confirm is pressed without leaving date mode first', async () => {
+      await renderScreen();
+
+      await fireEvent.press(screen.getByTestId('keypad-digit-5'));
+      await fireEvent.press(screen.getByTestId('keypad-toggle-date'));
+      await fireEvent.press(screen.getByTestId('keypad-digit-2'));
+      await fireEvent.press(screen.getByTestId('keypad-digit-1'));
+      await fireEvent.press(screen.getByTestId('keypad-confirm'));
+
+      expect(createMutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({ date: '2026-09-21' }),
+      );
+    });
+  });
+
+  it("falls back to the 1st of the active month when today's real date falls outside it", async () => {
+    mockedUseCurrentMonth.mockReturnValue({
+      data: { month: '2026-08', locked: false },
+      isLoading: false,
+      isError: false,
+    });
+    mockedUseCategoryMonths.mockReturnValue({
+      data: [{ ...shoppingCategoryMonth, month: '2026-08' }],
+      isLoading: false,
+      isError: false,
+    });
+
+    await renderScreen();
+
+    await fireEvent.press(screen.getByTestId('keypad-digit-5'));
+    await fireEvent.press(screen.getByTestId('keypad-confirm'));
+
+    expect(createMutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({ date: '2026-08-01' }),
+    );
   });
 });

@@ -234,6 +234,19 @@ describe('EditTransactionScreen', () => {
     );
   });
 
+  it('commits the still-typed day if Confirm is pressed without leaving date mode first', async () => {
+    await renderScreen();
+
+    await fireEvent.press(screen.getByTestId('keypad-toggle-date'));
+    await fireEvent.press(screen.getByTestId('keypad-digit-2'));
+    await fireEvent.press(screen.getByTestId('keypad-digit-1'));
+    await fireEvent.press(screen.getByTestId('keypad-confirm'));
+
+    expect(updateMutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({ date: '2026-09-21' }),
+    );
+  });
+
   it('rejects a day digit that would exceed how many days this month actually has', async () => {
     await renderScreen();
 
@@ -296,6 +309,18 @@ describe('EditTransactionScreen', () => {
 
     expect(await screen.findByText('Something went wrong. Please try again.')).toBeTruthy();
     expect(mockedRouterBack).not.toHaveBeenCalled();
+  });
+
+  it('disables the delete button while a delete or update mutation is in flight', async () => {
+    mockedUseDeleteTransaction.mockReturnValue({ mutateAsync: deleteMutateAsync, isPending: true });
+    await renderScreen();
+
+    expect(screen.getByTestId('delete-transaction-button').props.accessibilityState?.disabled).toBe(
+      true,
+    );
+
+    await fireEvent.press(screen.getByTestId('delete-transaction-button'));
+    expect(mockedAlert).not.toHaveBeenCalled();
   });
 
   it('swallows the first tap outside the keyboard instead of also pressing what is underneath', async () => {
