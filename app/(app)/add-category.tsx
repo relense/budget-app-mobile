@@ -34,10 +34,7 @@ import {
 } from '../../src/lib/amountInput';
 import { colorForIcon } from '../../src/lib/categoryIconPalette';
 import { useTheme } from '../../src/theme/ThemeProvider';
-import {
-  filterUnusedExpenseCategories,
-  isDuplicateCategoryName,
-} from '../../src/lib/unusedCategories';
+import { filterUnusedCategories, isDuplicateCategoryName } from '../../src/lib/unusedCategories';
 
 const BUDGET_TYPES: { key: BudgetType; label: string }[] = [
   { key: 'NEED', label: 'Need' },
@@ -102,9 +99,10 @@ export default function AddCategoryScreen() {
   const isCatalogError =
     currentMonthQuery.isError || categoriesQuery.isError || expenseCategoryMonths.isError;
   const catalogReady = !isCatalogLoading && !isCatalogError && !!month;
-  const unusedCategories = filterUnusedExpenseCategories(
+  const unusedCategories = filterUnusedCategories(
     categoriesQuery.data ?? [],
     expenseCategoryMonths.data ?? [],
+    'EXPENSE',
   );
   // If there's nothing to choose from, skip the choice entirely -- behaves exactly as it did
   // before this feature existed. Otherwise wait for the user to pick a path explicitly.
@@ -152,7 +150,7 @@ export default function AddCategoryScreen() {
       return;
     }
 
-    if (isDuplicateCategoryName(categoriesQuery.data ?? [], name)) {
+    if (isDuplicateCategoryName(categoriesQuery.data ?? [], name, 'EXPENSE')) {
       setToastMessage('Category already exists');
       return;
     }

@@ -1,7 +1,4 @@
-import {
-  filterUnusedExpenseCategories,
-  isDuplicateCategoryName,
-} from '../../../src/lib/unusedCategories';
+import { filterUnusedCategories, isDuplicateCategoryName } from '../../../src/lib/unusedCategories';
 import type { Category, CategoryMonth } from '../../../src/api/types';
 
 function category(overrides: Partial<Category> = {}): Category {
@@ -29,25 +26,32 @@ function categoryMonth(overrides: Partial<CategoryMonth> = {}): CategoryMonth {
   };
 }
 
-describe('filterUnusedExpenseCategories', () => {
+describe('filterUnusedCategories', () => {
   it('excludes a category already active this month', () => {
     const shopping = category({ id: 'c1', name: 'Shopping' });
     const activeThisMonth = [categoryMonth({ category: shopping })];
 
-    expect(filterUnusedExpenseCategories([shopping], activeThisMonth)).toEqual([]);
+    expect(filterUnusedCategories([shopping], activeThisMonth, 'EXPENSE')).toEqual([]);
   });
 
   it('includes a category not active this month', () => {
     const shopping = category({ id: 'c1', name: 'Shopping' });
     const gas = category({ id: 'c2', name: 'Gas' });
 
-    expect(filterUnusedExpenseCategories([shopping, gas], [])).toEqual([shopping, gas]);
+    expect(filterUnusedCategories([shopping, gas], [], 'EXPENSE')).toEqual([shopping, gas]);
   });
 
-  it('excludes income-direction categories', () => {
+  it('excludes categories of the other direction', () => {
     const salary = category({ id: 'c3', name: 'Salary', direction: 'INCOME' });
 
-    expect(filterUnusedExpenseCategories([salary], [])).toEqual([]);
+    expect(filterUnusedCategories([salary], [], 'EXPENSE')).toEqual([]);
+  });
+
+  it('filters to INCOME when asked, excluding EXPENSE categories', () => {
+    const salary = category({ id: 'c3', name: 'Salary', direction: 'INCOME', budgetType: null });
+    const shopping = category({ id: 'c1', name: 'Shopping' });
+
+    expect(filterUnusedCategories([salary, shopping], [], 'INCOME')).toEqual([salary]);
   });
 });
 
@@ -55,18 +59,28 @@ describe('isDuplicateCategoryName', () => {
   it('matches an existing expense category name case-insensitively, trimmed', () => {
     const catalog = [category({ name: 'Groceries' })];
 
-    expect(isDuplicateCategoryName(catalog, '  groceries  ')).toBe(true);
+    expect(isDuplicateCategoryName(catalog, '  groceries  ', 'EXPENSE')).toBe(true);
   });
 
   it('returns false for a name that does not match any existing category', () => {
     const catalog = [category({ name: 'Groceries' })];
 
-    expect(isDuplicateCategoryName(catalog, 'Gas')).toBe(false);
+    expect(isDuplicateCategoryName(catalog, 'Gas', 'EXPENSE')).toBe(false);
   });
 
-  it('ignores income-direction categories when checking for duplicates', () => {
-    const catalog = [category({ name: 'Salary', direction: 'INCOME' })];
+  it('ignores categories of the other direction when checking for duplicates', () => {
+    const catalog = [category({ name: 'Salary', direction: 'INCOME', budgetType: null })];
 
-    expect(isDuplicateCategoryName(catalog, 'Salary')).toBe(false);
+    expect(isDuplicateCategoryName(catalog, 'Salary', 'EXPENSE')).toBe(false);
+  });
+
+  it('matches within INCOME when asked, ignoring an EXPENSE category of the same name', () => {
+    const catalog = [
+      category({ name: 'Bonus', direction: 'EXPENSE' }),
+      category({ name: 'Salary', direction: 'INCOME', budgetType: null }),
+    ];
+
+    expect(isDuplicateCategoryName(catalog, 'Salary', 'INCOME')).toBe(true);
+    expect(isDuplicateCategoryName(catalog, 'Bonus', 'INCOME')).toBe(false);
   });
 });
