@@ -1,4 +1,5 @@
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import { Keyboard } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 const testSafeAreaMetrics = {
@@ -16,9 +17,21 @@ import AddRecurringExpenseScreen from '../../../app/(app)/add-recurring-expense'
 jest.mock('../../../src/api/budgetHomeQueries');
 jest.mock('../../../src/api/categoryQueries');
 jest.mock('../../../src/api/recurringExpenseMutations');
+jest.mock('../../../src/lib/today', () => ({
+  todayIsoDate: () => '2026-09-15',
+}));
 jest.mock('expo-router', () => ({
   router: { back: jest.fn(), push: jest.fn() },
 }));
+
+let keyboardDidShow: () => void = () => {};
+let keyboardDidHide: () => void = () => {};
+
+jest.spyOn(Keyboard, 'addListener').mockImplementation((event, callback) => {
+  if (event === 'keyboardDidShow') keyboardDidShow = callback as () => void;
+  if (event === 'keyboardDidHide') keyboardDidHide = callback as () => void;
+  return { remove: jest.fn() } as unknown as ReturnType<typeof Keyboard.addListener>;
+});
 
 const mockedUseCurrentMonth = useCurrentMonth as jest.Mock;
 const mockedUseCategories = useCategories as jest.Mock;
@@ -218,25 +231,33 @@ describe('AddRecurringExpenseScreen', () => {
     expect(screen.getByTestId('due-day-value').props.children).toBe('10');
   });
 
-  it('keeps confirm disabled until name, a valid due day, and a positive amount are all set', async () => {
+  it('keeps confirm disabled until name and a positive amount are both set (due day is optional, see the fallback tests below)', async () => {
     await renderScreen();
 
     expect(screen.getByTestId('keypad-confirm').props.accessibilityState?.disabled).toBe(true);
 
     await fireEvent.changeText(screen.getByTestId('recurring-name-input'), 'Water');
-    expect(screen.getByTestId('keypad-confirm').props.accessibilityState?.disabled).toBe(true);
-
-    await fireEvent.press(screen.getByTestId('keypad-toggle-date'));
-    await fireEvent.press(screen.getByTestId('keypad-digit-1'));
-    await fireEvent.press(screen.getByTestId('keypad-digit-0'));
-    await fireEvent.press(screen.getByTestId('keypad-toggle-date'));
     expect(screen.getByTestId('keypad-confirm').props.accessibilityState?.disabled).toBe(true);
 
     await fireEvent.press(screen.getByTestId('keypad-digit-5'));
     expect(screen.getByTestId('keypad-confirm').props.accessibilityState?.disabled).toBe(false);
   });
 
-  it('rejects a due day of 0 -- confirm stays disabled even with a name and amount set', async () => {
+  it('due day is not required to confirm -- left unset, submitting falls back to today\'s day-of-month', async () => {
+    await renderScreen();
+
+    await fireEvent.changeText(screen.getByTestId('recurring-name-input'), 'Water');
+    await fireEvent.press(screen.getByTestId('keypad-digit-5'));
+
+    expect(screen.getByTestId('keypad-confirm').props.accessibilityState?.disabled).toBe(false);
+
+    await fireEvent.press(screen.getByTestId('keypad-confirm'));
+
+    // Mocked todayIsoDate() is '2026-09-15' -> day 15.
+    expect(createMutateAsync).toHaveBeenCalledWith(expect.objectContaining({ dueDay: 15 }));
+  });
+
+  it('typing an invalid due day (0) and submitting also falls back to today\'s day-of-month, not 0', async () => {
     await renderScreen();
 
     await fireEvent.changeText(screen.getByTestId('recurring-name-input'), 'Water');
@@ -245,7 +266,11 @@ describe('AddRecurringExpenseScreen', () => {
     await fireEvent.press(screen.getByTestId('keypad-toggle-date'));
     await fireEvent.press(screen.getByTestId('keypad-digit-5'));
 
-    expect(screen.getByTestId('keypad-confirm').props.accessibilityState?.disabled).toBe(true);
+    expect(screen.getByTestId('keypad-confirm').props.accessibilityState?.disabled).toBe(false);
+
+    await fireEvent.press(screen.getByTestId('keypad-confirm'));
+
+    expect(createMutateAsync).toHaveBeenCalledWith(expect.objectContaining({ dueDay: 15 }));
   });
 
   it('rejects a second due-day digit that would push the day past the current month\'s real day count (September has 30, not 31)', async () => {
@@ -339,5 +364,22 @@ describe('AddRecurringExpenseScreen', () => {
 
     expect(screen.getByText('Something went wrong. Please try again.')).toBeTruthy();
     expect(mockedRouterBack).not.toHaveBeenCalled();
+  });
+
+  it('does not cover the name field with the keyboard-dismiss overlay while it is focused (was interfering with typing)', async () => {
+    await renderScreen();
+
+    await fireEvent(screen.getByTestId('recurring-name-input'), 'focus');
+    await act(async () => {
+      keyboardDidShow();
+    });
+
+    expect(screen.queryByTestId('keyboard-dismiss-overlay')).toBeNull();
+
+    // Once focus leaves the field (keyboard still up, e.g. moved to another control), the
+    // overlay is free to appear again to protect keypad taps.
+    await fireEvent(screen.getByTestId('recurring-name-input'), 'blur');
+
+    expect(screen.getByTestId('keyboard-dismiss-overlay')).toBeTruthy();
   });
 });

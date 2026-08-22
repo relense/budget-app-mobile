@@ -1,6 +1,6 @@
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { Alert } from 'react-native';
+import { Alert, Keyboard } from 'react-native';
 
 const testSafeAreaMetrics = {
   frame: { x: 0, y: 0, width: 390, height: 844 },
@@ -29,6 +29,15 @@ jest.mock('expo-router', () => ({
   router: { back: jest.fn(), push: jest.fn() },
   useLocalSearchParams: jest.fn(),
 }));
+
+let keyboardDidShow: () => void = () => {};
+let keyboardDidHide: () => void = () => {};
+
+jest.spyOn(Keyboard, 'addListener').mockImplementation((event, callback) => {
+  if (event === 'keyboardDidShow') keyboardDidShow = callback as () => void;
+  if (event === 'keyboardDidHide') keyboardDidHide = callback as () => void;
+  return { remove: jest.fn() } as unknown as ReturnType<typeof Keyboard.addListener>;
+});
 
 const mockedUseCurrentMonth = useCurrentMonth as jest.Mock;
 const mockedUseCategories = useCategories as jest.Mock;
@@ -434,5 +443,20 @@ describe('EditRecurringExpenseScreen', () => {
 
     expect(unmarkPaidMutateAsync).toHaveBeenCalledWith([]);
     expect(mockedRouterBack).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not cover the name field with the keyboard-dismiss overlay while it is focused (was interfering with typing)', async () => {
+    await renderScreen();
+
+    await fireEvent(screen.getByTestId('recurring-name-input'), 'focus');
+    await act(async () => {
+      keyboardDidShow();
+    });
+
+    expect(screen.queryByTestId('keyboard-dismiss-overlay')).toBeNull();
+
+    await fireEvent(screen.getByTestId('recurring-name-input'), 'blur');
+
+    expect(screen.getByTestId('keyboard-dismiss-overlay')).toBeTruthy();
   });
 });

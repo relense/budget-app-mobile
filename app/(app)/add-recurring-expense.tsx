@@ -35,6 +35,7 @@ import {
   isCompleteDayDigits,
 } from '../../src/lib/dateInput';
 import { budgetTypeForCategory } from '../../src/lib/recurringBudgetType';
+import { todayIsoDate } from '../../src/lib/today';
 import { useTheme } from '../../src/theme/ThemeProvider';
 
 const DUE_DAY_UNSET_PLACEHOLDER = '--';
@@ -76,6 +77,13 @@ export default function AddRecurringExpenseScreen() {
   const [dateMode, setDateMode] = useState(false);
   const [overlay, setOverlay] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
+  // The keyboard-dismiss-overlay below exists to eat a stray tap meant to dismiss the keyboard
+  // from landing on a keypad button underneath -- it was never meant to cover the name field
+  // itself. Rendering it the instant the keyboard appears (which happens the moment this field
+  // is tapped) sat it directly on top of the just-focused native TextInput, which was
+  // interfering with normal typing/selection. Gated on this so it never covers the field you're
+  // actually typing into.
+  const [nameFocused, setNameFocused] = useState(false);
 
   useEffect(() => {
     const showSub = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
@@ -95,12 +103,13 @@ export default function AddRecurringExpenseScreen() {
 
   const dueDay = isCompleteDayDigits(dueDayDigits) ? Number(dueDayDigits) : null;
 
+  // Due day is not required to submit -- left unset, it falls back to today's day-of-month
+  // (see handleConfirm) rather than blocking the save.
   const canSubmit =
     catalogReady &&
     !createRecurringExpense.isPending &&
     !!selectedCategory &&
     name.trim().length > 0 &&
-    dueDay !== null &&
     amountTextToCents(amountText) > 0;
 
   function handleDigit(digit: string) {
@@ -125,7 +134,10 @@ export default function AddRecurringExpenseScreen() {
   }
 
   async function handleConfirm() {
-    if (!canSubmit || !month || !selectedCategory || dueDay === null) return;
+    if (!canSubmit || !month || !selectedCategory) return;
+    // Left unset -- assume today's day-of-month rather than blocking the save (there's no
+    // "leave it unset" option server-side, RecurringExpenseInput.dueDay is required).
+    const finalDueDay = dueDay ?? Number(todayIsoDate().split('-')[2]);
 
     try {
       await createRecurringExpense.mutateAsync({
@@ -133,7 +145,7 @@ export default function AddRecurringExpenseScreen() {
         amountCents: amountTextToCents(amountText),
         categoryId: selectedCategory.id,
         budgetType: budgetTypeForCategory(selectedCategory),
-        dueDay,
+        dueDay: finalDueDay,
         month,
       });
       router.back();
@@ -219,6 +231,8 @@ export default function AddRecurringExpenseScreen() {
             placeholderTextColor={colors.text.secondary}
             value={name}
             onChangeText={setName}
+            onFocus={() => setNameFocused(true)}
+            onBlur={() => setNameFocused(false)}
           />
         </View>
 
@@ -302,7 +316,7 @@ export default function AddRecurringExpenseScreen() {
         </>
       ) : null}
 
-      {keyboardVisible ? (
+      {keyboardVisible && !nameFocused ? (
         <Pressable
           testID="keyboard-dismiss-overlay"
           style={[StyleSheet.absoluteFill, styles.keyboardDismissOverlay]}

@@ -117,6 +117,13 @@ export default function EditRecurringExpenseScreen() {
   const [dateMode, setDateMode] = useState(false);
   const [overlay, setOverlay] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
+  // The keyboard-dismiss-overlay below exists to eat a stray tap meant to dismiss the keyboard
+  // from landing on a keypad button underneath -- it was never meant to cover the name field
+  // itself. Rendering it the instant the keyboard appears (which happens the moment this field
+  // is tapped) sat it directly on top of the just-focused native TextInput, which was
+  // interfering with normal typing/selection. Gated on this so it never covers the field you're
+  // actually typing into.
+  const [nameFocused, setNameFocused] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   useEffect(() => {
@@ -317,6 +324,8 @@ export default function EditRecurringExpenseScreen() {
             style={[styles.nameInput, { backgroundColor: colors.pill.textInputBackground }]}
             value={name}
             onChangeText={setName}
+            onFocus={() => setNameFocused(true)}
+            onBlur={() => setNameFocused(false)}
           />
         </View>
 
@@ -406,7 +415,7 @@ export default function EditRecurringExpenseScreen() {
         </>
       ) : null}
 
-      {keyboardVisible ? (
+      {keyboardVisible && !nameFocused ? (
         <Pressable
           testID="keyboard-dismiss-overlay"
           style={[StyleSheet.absoluteFill, styles.keyboardDismissOverlay]}

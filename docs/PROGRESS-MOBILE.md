@@ -683,6 +683,25 @@ default.
       already invalidates. The row's subtitle (previously the most
       recent transaction's date) now shows "Received"/"Not received"
       instead. 393 tests total across 41 suites.
+- [x] Two more Add/Edit Recurring Expense fixes, both from the running
+      app. **Name field getting its text selected while typing**: root
+      cause traced to the `keyboard-dismiss-overlay` (a full-screen
+      `Pressable`, `zIndex: 20`, meant only to eat a stray tap-to-dismiss
+      landing on a keypad button underneath) rendering the instant the
+      keyboard appears — which is the same moment the name field is
+      tapped to start typing, so it sat directly on top of the
+      just-focused native `TextInput`. Fixed with a `nameFocused` flag
+      (`onFocus`/`onBlur` on the name input) gating the overlay so it
+      never covers the field currently being typed into — applied to
+      both screens. **Due day no longer required to submit**: previously
+      `canSubmit` (Add) blocked confirm entirely if the due day was
+      left unset; now it isn't part of that check at all, and
+      `handleConfirm` falls back to today's day-of-month
+      (`Number(todayIsoDate().split('-')[2])`) when unset, same
+      "don't block the save, just assume something reasonable" instinct
+      already applied to Edit's blank-due-day case (which falls back to
+      the row's *original* value instead, since it has one). 396 tests
+      total across 41 suites.
 
 **Scaffold caveats worth knowing before the next `npm install` in this
 repo** (SDK 57 is very new — pin these deliberately, don't let npm grab
