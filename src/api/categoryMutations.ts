@@ -162,12 +162,12 @@ export async function createCategoryWithBudget(
 }
 
 export function useCreateCategoryWithBudget() {
-  const { accessToken } = useAuth();
+  const { requestWithAuth } = useAuth();
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: (input: CreateCategoryWithBudgetInput) =>
-      createCategoryWithBudget(getApiUrl(), accessToken as string, input),
+      requestWithAuth((token) => createCategoryWithBudget(getApiUrl(), token, input)),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['categoryMonths'] });
       // This mutation also creates a brand-new catalog entry (unlike useAddCategoryToMonth
@@ -181,12 +181,12 @@ export function useCreateCategoryWithBudget() {
 // For reactivating an existing catalog category into the current month, instead of always
 // creating a new one -- see filterUnusedExpenseCategories.
 export function useAddCategoryToMonth() {
-  const { accessToken } = useAuth();
+  const { requestWithAuth } = useAuth();
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: (input: AddCategoryToMonthInput) =>
-      addCategoryToMonth(getApiUrl(), accessToken as string, input),
+      requestWithAuth((token) => addCategoryToMonth(getApiUrl(), token, input)),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['categoryMonths'] });
     },
@@ -196,12 +196,12 @@ export function useAddCategoryToMonth() {
 // For editing an existing CategoryMonth's budget from the swipe-to-edit screen -- doesn't
 // touch the Category catalog at all, so no ['categories'] invalidation needed.
 export function useUpdateCategoryMonthBudget() {
-  const { accessToken } = useAuth();
+  const { requestWithAuth } = useAuth();
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: (input: UpdateCategoryMonthBudgetInput) =>
-      updateCategoryMonthBudget(getApiUrl(), accessToken as string, input),
+      requestWithAuth((token) => updateCategoryMonthBudget(getApiUrl(), token, input)),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['categoryMonths'] });
     },
@@ -212,12 +212,12 @@ export function useUpdateCategoryMonthBudget() {
 // (Category.name), so ['categories'] needs invalidating too, unlike the budget-only mutation
 // above.
 export function useUpdateCategory() {
-  const { accessToken } = useAuth();
+  const { requestWithAuth } = useAuth();
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: (input: UpdateCategoryInput) =>
-      updateCategory(getApiUrl(), accessToken as string, input),
+      requestWithAuth((token) => updateCategory(getApiUrl(), token, input)),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['categoryMonths'] });
       queryClient.invalidateQueries({ queryKey: ['categories'] });
@@ -229,12 +229,12 @@ export function useUpdateCategory() {
 // underlying Category server-side (see docs/SERVICES.md), so both query keys are invalidated
 // the same way useUpdateCategory's are.
 export function useRemoveCategoryFromMonth() {
-  const { accessToken } = useAuth();
+  const { requestWithAuth } = useAuth();
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: (input: RemoveCategoryFromMonthInput) =>
-      removeCategoryFromMonth(getApiUrl(), accessToken as string, input),
+      requestWithAuth((token) => removeCategoryFromMonth(getApiUrl(), token, input)),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['categoryMonths'] });
       queryClient.invalidateQueries({ queryKey: ['categories'] });

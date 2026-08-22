@@ -257,6 +257,87 @@ default.
       actually failed. Add/Edit Transaction and Add Category keep the modal
       grabber visible and add a retry button where there previously was
       none. 249 tests total across 33 suites.
+- [x] Session token refresh (`src/auth/AuthContext.tsx`) — root-caused the
+      generic errors above to a real gap, not a UI-only problem: the access
+      JWT is short-lived (15 min, see `docs/PLAN.md`) and nothing refreshed
+      it except once, at cold-start bootstrap, so any session left open past
+      15 minutes started failing every request with `UNAUTHENTICATED` until
+      the app was killed and reopened. Two mechanisms now, neither alone
+      being enough (a reactive-only fix eats a failed round-trip on every
+      idle-then-resume; a proactive-only fix misses a token that expires
+      while the app stays continuously foregrounded):
+      - **Reactive** — `useAuth()` exposes `requestWithAuth(request)`, which
+        every query/mutation hook now goes through instead of reading
+        `accessToken` and calling the API directly (an interface change,
+        flagged before starting: touches `AuthContext`'s return shape and
+        all ~14 call sites across `budgetHomeQueries.ts`,
+        `categoryQueries.ts`, `categoryMutations.ts`,
+        `transactionMutations.ts`). On `isUnauthenticatedError` (new export
+        from `graphqlClient.ts`, checking `extensions.code ===
+        'UNAUTHENTICATED'` per `docs/SERVICES.md`), refreshes and retries
+        the same request exactly once with the new token; any other error
+        (network, validation, a second UNAUTHENTICATED after the retry)
+        passes straight through unchanged.
+      - **Proactive** — an `AppState` listener refreshes on transition to
+        `active` if the current token is ≥10 min old (comfortably under the
+        real 15-min TTL), so by the time you switch back into the app after
+        being away, the token's usually already fresh — this is the case
+        the user actually hit ("go idle, switch to another app, come back,
+        can't use it").
+      - Both funnel through one **single-flighted** `refreshAccessToken`
+        (a `useRef`-held in-flight promise) — the backend's refresh token is
+        single-use with mandatory rotation, so if several requests fail at
+        once (Budget Home fires ~5 in parallel), only the first may actually
+        call `refreshSession`; the rest await that same promise instead of
+        each trying to rotate it independently, which would make every one
+        but the first fail. A failed refresh (revoked/expired/already-used
+        refresh token) signs out, same as a rejected refresh at bootstrap.
+      - Does **not** weaken the "stolen access token is only useful for 15
+        min" property: refreshing still strictly requires the refresh
+        token, a separate secret the resolver verifying the access token
+        never sees. The device already held the refresh token continuously
+        in SecureStore since sign-in (that's what "stay signed in" already
+        meant); this only changes *when* the legitimate app uses a secret it
+        already had, not what an attacker could get from either token
+        leaking on its own.
+      - `AuthState`/`AuthAction` (`src/auth/authReducer.ts`) gained
+        `accessTokenIssuedAt` and a `TOKEN_REFRESHED` action, distinct from
+        `SIGN_IN` (a mid-session rotation, not a fresh login) — an interface
+        change to the reducer's state shape, flagged for the same reason as
+        above. Round-2/3 pr-reviewer fix: a refresh in flight had no
+        awareness of a concurrent `signOut()` -- if the user signed out
+        while a proactive (foreground-resume) or reactive refresh was still
+        pending, the late-arriving refresh would re-persist a fresh token
+        pair to SecureStore and dispatch back to `signedIn`, silently
+        resurrecting a session the user had just explicitly ended. A first
+        pass (a `sessionGenerationRef` checked once, right after
+        `refreshSession` resolves) turned out to only narrow the window,
+        not close it — a sign-out landing during the *next* await
+        (`setStoredTokens`'s own SecureStore write) still slipped through,
+        since nothing re-checked the generation after that point. Actually
+        fixed by making `signOut()` itself `await` any in-flight
+        `refreshPromiseRef.current` before doing its own clear/dispatch --
+        this makes the final state deterministic by ordering (`signOut()`'s
+        `SIGN_OUT` dispatch is always the last word, whichever await the
+        stale refresh happened to be suspended on) rather than depending on
+        a check happening to sit at the right point in the code. The
+        generation check stays too, re-verified at both await boundaries,
+        as defense in depth on top of that ordering guarantee. Two tests
+        cover the two distinct interleavings (sign-out during the refresh's
+        network call vs. during its token persist). The second one's first
+        draft asserted only the final `status`/`accessToken` values and
+        turned out to pass even against fully unfixed code -- not because
+        the race was closed, but because React batches the
+        `TOKEN_REFRESHED` + `SIGN_OUT` dispatches from the same event into
+        one render, so the transient bad intermediate state a real bug
+        produces is never actually committed/observable that way, and
+        `signOut()`'s dispatch landing last in the final render can pass
+        by coincidence of which side's remaining awaits happen to resolve
+        first. Reworked to assert directly on `requestWithAuth`'s retry
+        call (a plain function call, not React state, so it isn't subject
+        to that batching) — confirmed by checking out the pre-fix
+        `AuthContext.tsx` in isolation and rerunning both tests against it
+        before restoring the fix. 265 tests total across 33 suites.
 
 **Scaffold caveats worth knowing before the next `npm install` in this
 repo** (SDK 57 is very new — pin these deliberately, don't let npm grab

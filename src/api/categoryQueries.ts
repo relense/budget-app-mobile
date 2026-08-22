@@ -22,15 +22,13 @@ const CATEGORIES_QUERY = `
 // this month" instead of always creating a new one, which would otherwise duplicate a category
 // the user already has but simply hasn't activated for the current month yet.
 export function useCategories() {
-  const { accessToken } = useAuth();
+  const { accessToken, requestWithAuth } = useAuth();
 
   return useQuery({
     queryKey: ['categories'],
     queryFn: () =>
-      graphqlRequest<{ categories: Category[] }>(
-        getApiUrl(),
-        accessToken as string,
-        CATEGORIES_QUERY,
+      requestWithAuth((token) =>
+        graphqlRequest<{ categories: Category[] }>(getApiUrl(), token, CATEGORIES_QUERY),
       ).then((data) => data.categories),
     enabled: !!accessToken,
   });
