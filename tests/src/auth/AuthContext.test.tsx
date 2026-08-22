@@ -310,6 +310,15 @@ describe('AuthProvider requestWithAuth', () => {
     });
 
     await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('signedOut'));
+    // Checking only the final status/displayed token isn't enough here: React can batch the
+    // TOKEN_REFRESHED and SIGN_OUT dispatches from this same act() scope into one render, so an
+    // intermediate bad value that was genuinely dispatched can still never show up in anything
+    // React renders -- not because the race was closed, but because the render layer collapsed
+    // it. requestWithAuth's retry call is a plain function call, not React state, so it isn't
+    // subject to that collapsing: asserting mockRequest was never called with the stale rotated
+    // token directly checks whether requestWithAuth actually went on to use it, which is the
+    // real, code-level question this test exists to answer.
+    expect(mockRequest).not.toHaveBeenCalledWith('late-access');
   });
 });
 

@@ -324,9 +324,20 @@ default.
         generation check stays too, re-verified at both await boundaries,
         as defense in depth on top of that ordering guarantee. Two tests
         cover the two distinct interleavings (sign-out during the refresh's
-        network call vs. during its token persist) — both were verified to
-        actually fail without the corresponding fix before being confirmed
-        fixed. 265 tests total across 33 suites.
+        network call vs. during its token persist). The second one's first
+        draft asserted only the final `status`/`accessToken` values and
+        turned out to pass even against fully unfixed code -- not because
+        the race was closed, but because React batches the
+        `TOKEN_REFRESHED` + `SIGN_OUT` dispatches from the same event into
+        one render, so the transient bad intermediate state a real bug
+        produces is never actually committed/observable that way, and
+        `signOut()`'s dispatch landing last in the final render can pass
+        by coincidence of which side's remaining awaits happen to resolve
+        first. Reworked to assert directly on `requestWithAuth`'s retry
+        call (a plain function call, not React state, so it isn't subject
+        to that batching) — confirmed by checking out the pre-fix
+        `AuthContext.tsx` in isolation and rerunning both tests against it
+        before restoring the fix. 265 tests total across 33 suites.
 
 **Scaffold caveats worth knowing before the next `npm install` in this
 repo** (SDK 57 is very new — pin these deliberately, don't let npm grab
