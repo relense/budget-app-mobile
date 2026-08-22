@@ -246,7 +246,7 @@ describe('AuthProvider requestWithAuth', () => {
     expect(mockedRefreshSession).toHaveBeenCalledTimes(1);
   });
 
-  it('does not resurrect a signed-out session when sign-out happens while a refresh is still in flight', async () => {
+  it('does not resurrect a signed-out session when sign-out happens while a refresh network call is still in flight', async () => {
     mockedLogout.mockResolvedValue(undefined);
     mockRequest.mockRejectedValueOnce(unauthenticatedError);
     let resolveRefresh: (tokens: { accessToken: string; refreshToken: string }) => void = () => {};
@@ -259,20 +259,57 @@ describe('AuthProvider requestWithAuth', () => {
     await fireEvent.press(screen.getByTestId('makeRequest'));
     await waitFor(() => expect(mockedRefreshSession).toHaveBeenCalledTimes(1));
 
-    // Sign out while that refresh is still pending.
-    await fireEvent.press(screen.getByTestId('signOut'));
-    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('signedOut'));
     mockedSetStoredTokens.mockClear();
 
-    // Now let the stale refresh resolve, late.
+    // Sign out while that refresh's network call is still pending -- signOut() itself now
+    // awaits the same in-flight refresh promise before doing its own clear/dispatch (see
+    // signOut() in AuthContext.tsx). Triggering the press and resolving the pending promise
+    // inside one act() call, rather than as two separate steps, keeps signOut()'s entire
+    // continuation (which only becomes unblocked once resolveRefresh runs) inside a scope React
+    // is tracking -- awaiting fireEvent.press on its own would deadlock (act() waits for
+    // signOut()'s pending await, which can't resolve until resolveRefresh runs), and resolving
+    // outside any act() at all left signOut()'s later dispatch() running unwrapped.
     await act(async () => {
+      fireEvent.press(screen.getByTestId('signOut'));
       resolveRefresh({ accessToken: 'late-access', refreshToken: 'late-refresh' });
     });
 
-    // Must stay signed out -- not resurrected by the late-arriving refresh -- and must not
-    // re-persist a token pair for a session that was just explicitly ended.
-    expect(screen.getByTestId('status')).toHaveTextContent('signedOut');
+    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('signedOut'));
+    // The refresh's own generation check fires before it ever reaches setStoredTokens in this
+    // interleaving (sign-out landed before refreshSession() itself resolved).
     expect(mockedSetStoredTokens).not.toHaveBeenCalled();
+  });
+
+  it('does not resurrect a signed-out session when sign-out happens while the refreshed tokens are still being persisted', async () => {
+    // Distinct from the test above: here refreshSession() has already resolved and passed the
+    // *first* generation check, so only the second check (right before the TOKEN_REFRESHED
+    // dispatch, after setStoredTokens) can still catch this interleaving.
+    mockedLogout.mockResolvedValue(undefined);
+    mockRequest.mockRejectedValueOnce(unauthenticatedError);
+    mockedRefreshSession.mockResolvedValue({ accessToken: 'late-access', refreshToken: 'late-refresh' });
+    let resolvePersist: () => void = () => {};
+    mockedSetStoredTokens.mockReturnValue(
+      new Promise<void>((resolve) => {
+        resolvePersist = resolve;
+      }),
+    );
+
+    await fireEvent.press(screen.getByTestId('makeRequest'));
+    await waitFor(() =>
+      expect(mockedSetStoredTokens).toHaveBeenCalledWith({
+        accessToken: 'late-access',
+        refreshToken: 'late-refresh',
+      }),
+    );
+
+    // Sign out while the refreshed tokens are still being written to SecureStore -- see the
+    // comment in the test above for why the press and the resolve are combined in one act().
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('signOut'));
+      resolvePersist();
+    });
+
+    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('signedOut'));
   });
 });
 

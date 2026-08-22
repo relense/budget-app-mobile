@@ -304,17 +304,29 @@ default.
         `accessTokenIssuedAt` and a `TOKEN_REFRESHED` action, distinct from
         `SIGN_IN` (a mid-session rotation, not a fresh login) — an interface
         change to the reducer's state shape, flagged for the same reason as
-        above. Round-2 pr-reviewer fix: a refresh in flight had no
+        above. Round-2/3 pr-reviewer fix: a refresh in flight had no
         awareness of a concurrent `signOut()` -- if the user signed out
         while a proactive (foreground-resume) or reactive refresh was still
         pending, the late-arriving refresh would re-persist a fresh token
         pair to SecureStore and dispatch back to `signedIn`, silently
-        resurrecting a session the user had just explicitly ended. Fixed
-        with a `sessionGenerationRef` bumped synchronously as the first
-        statement in `signOut()`; `refreshAccessToken` captures the
-        generation at the start of each attempt and discards its result
-        (no persist, no dispatch) if that generation has since moved on.
-        264 tests total across 33 suites.
+        resurrecting a session the user had just explicitly ended. A first
+        pass (a `sessionGenerationRef` checked once, right after
+        `refreshSession` resolves) turned out to only narrow the window,
+        not close it — a sign-out landing during the *next* await
+        (`setStoredTokens`'s own SecureStore write) still slipped through,
+        since nothing re-checked the generation after that point. Actually
+        fixed by making `signOut()` itself `await` any in-flight
+        `refreshPromiseRef.current` before doing its own clear/dispatch --
+        this makes the final state deterministic by ordering (`signOut()`'s
+        `SIGN_OUT` dispatch is always the last word, whichever await the
+        stale refresh happened to be suspended on) rather than depending on
+        a check happening to sit at the right point in the code. The
+        generation check stays too, re-verified at both await boundaries,
+        as defense in depth on top of that ordering guarantee. Two tests
+        cover the two distinct interleavings (sign-out during the refresh's
+        network call vs. during its token persist) — both were verified to
+        actually fail without the corresponding fix before being confirmed
+        fixed. 265 tests total across 33 suites.
 
 **Scaffold caveats worth knowing before the next `npm install` in this
 repo** (SDK 57 is very new — pin these deliberately, don't let npm grab

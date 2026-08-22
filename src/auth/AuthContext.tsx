@@ -114,6 +114,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function signOut() {
     sessionGenerationRef.current += 1;
+    // If a refresh is mid-flight, wait for it to settle before this function does its own
+    // storage clear + dispatch. The generation bump above makes that refresh discard its own
+    // result once it notices, but only at the specific points it happens to check -- awaiting
+    // it here as well makes the *ordering* itself deterministic (this function's SIGN_OUT
+    // always lands after whatever the stale refresh does, not racing it), so the outcome
+    // doesn't depend on exactly which await the refresh happened to be suspended on when
+    // signOut() was called.
+    if (refreshPromiseRef.current) {
+      await refreshPromiseRef.current.catch(() => {});
+    }
     if (state.status === 'signedIn') {
       try {
         await apiLogout(getApiUrl(), state.refreshToken);
@@ -163,6 +173,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             err,
           );
         }
+
+        // Re-checked here, not just before setStoredTokens above -- signOut() awaits this same
+        // promise (see signOut() above), which is what actually guarantees the final state is
+        // correct (its own SIGN_OUT dispatch is ordered after this one, if this one still runs).
+        // This second check is defense in depth on top of that ordering guarantee: without it,
+        // a sign-out landing during setStoredTokens' own await still lets this dispatch briefly
+        // flip state back to signedIn before signOut()'s dispatch corrects it.
+        if (sessionGenerationRef.current !== generationAtStart) {
+          throw new Error('session_ended_during_refresh');
+        }
+
         dispatch({ type: 'TOKEN_REFRESHED', ...rotated, accessTokenIssuedAt: Date.now() });
         return rotated;
       } catch (err) {
