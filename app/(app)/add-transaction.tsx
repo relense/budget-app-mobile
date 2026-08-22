@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { useCategoryMonths, useCurrentMonth } from '../../src/api/budgetHomeQueries';
+import { useCategoryMonths, useCurrentMonth, useTransactions } from '../../src/api/budgetHomeQueries';
 import { useCreateTransaction } from '../../src/api/transactionMutations';
 import { AmountKeypad } from '../../src/components/AmountKeypad';
 import { CategoryIcon } from '../../src/components/CategoryIcon';
@@ -46,6 +46,11 @@ export default function AddTransactionScreen() {
   const currentMonthQuery = useCurrentMonth();
   const month = currentMonthQuery.data?.month;
   const expenseCategoryMonths = useCategoryMonths(month, 'EXPENSE');
+  // Only consulted for its [0] entry, to default the category pill to whatever was used most
+  // recently (see selectedCategoryMonth below) -- transactions(month) is already ordered date
+  // DESC, createdAt DESC (see docs/SERVICES.md), so this is the last transaction actually
+  // entered this month, not just the one dated latest.
+  const transactionsQuery = useTransactions(month);
   const createTransaction = useCreateTransaction();
 
   const [selectedCategoryMonthId, setSelectedCategoryMonthId] = useState<string | null>(null);
@@ -76,13 +81,19 @@ export default function AddTransactionScreen() {
   const effectiveDate =
     !dateTouched && month && todayIsoDate().slice(0, 7) !== month ? `${month}-01` : transactionDate;
 
-  const isCatalogLoading = currentMonthQuery.isLoading || expenseCategoryMonths.isLoading;
-  const isCatalogError = currentMonthQuery.isError || expenseCategoryMonths.isError;
+  const isCatalogLoading =
+    currentMonthQuery.isLoading || expenseCategoryMonths.isLoading || transactionsQuery.isLoading;
+  const isCatalogError =
+    currentMonthQuery.isError || expenseCategoryMonths.isError || transactionsQuery.isError;
   const catalogReady = !isCatalogLoading && !isCatalogError && !!month;
 
   const categoryMonths = expenseCategoryMonths.data ?? [];
+  const lastUsedCategoryMonthId = transactionsQuery.data?.[0]?.categoryMonth.id;
   const selectedCategoryMonth =
-    categoryMonths.find((cm) => cm.id === selectedCategoryMonthId) ?? categoryMonths[0] ?? null;
+    categoryMonths.find((cm) => cm.id === selectedCategoryMonthId) ??
+    categoryMonths.find((cm) => cm.id === lastUsedCategoryMonthId) ??
+    categoryMonths[0] ??
+    null;
 
   const canSubmit = !!selectedCategoryMonth && amountTextToCents(amountText) > 0 && !createTransaction.isPending;
 
@@ -169,9 +180,12 @@ export default function AddTransactionScreen() {
             message={CATALOG_LOAD_ERROR}
             onRetry={() => {
               currentMonthQuery.refetch();
-              // expenseCategoryMonths is gated on `month` being known (enabled: !!month) -- only
-              // worth refetching once there's a month to scope it to.
-              if (month) expenseCategoryMonths.refetch();
+              // expenseCategoryMonths/transactionsQuery are both gated on `month` being known
+              // (enabled: !!month) -- only worth refetching once there's a month to scope them to.
+              if (month) {
+                expenseCategoryMonths.refetch();
+                transactionsQuery.refetch();
+              }
             }}
           />
         </View>

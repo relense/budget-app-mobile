@@ -338,6 +338,18 @@ default.
         to that batching) — confirmed by checking out the pre-fix
         `AuthContext.tsx` in isolation and rerunning both tests against it
         before restoring the fix. 265 tests total across 33 suites.
+- [x] Add Transaction defaults the category pill to whatever category the
+      most recently *created* transaction used this month, instead of
+      always the first active expense category — `app/(app)/add-transaction.tsx`
+      now also calls `useTransactions(month)` (already warmed from Budget
+      Home's own fetch in the common case, so no extra loading flash) and
+      reads `[0].categoryMonth.id` as the default, falling back to
+      first-in-list if that category is no longer active this month or no
+      transactions exist yet. Relies on `transactions(month)` already being
+      ordered `date DESC, createdAt DESC` server-side (`docs/SERVICES.md`)
+      — `[0]` is the last one actually entered, not just the one dated
+      latest. An explicit user pick (via the category picker) still always
+      wins over this default. 268 tests total across 33 suites.
 
 **Scaffold caveats worth knowing before the next `npm install` in this
 repo** (SDK 57 is very new — pin these deliberately, don't let npm grab
