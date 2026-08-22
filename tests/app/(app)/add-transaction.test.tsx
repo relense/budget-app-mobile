@@ -6,7 +6,11 @@ const testSafeAreaMetrics = {
   insets: { top: 47, left: 0, right: 0, bottom: 34 },
 };
 
-import { useCategoryMonths, useCurrentMonth } from '../../../src/api/budgetHomeQueries';
+import {
+  useCategoryMonths,
+  useCurrentMonth,
+  useTransactions,
+} from '../../../src/api/budgetHomeQueries';
 import { useCreateTransaction } from '../../../src/api/transactionMutations';
 import { ThemeProvider } from '../../../src/theme/ThemeProvider';
 import { router } from 'expo-router';
@@ -23,6 +27,7 @@ jest.mock('expo-router', () => ({
 
 const mockedUseCurrentMonth = useCurrentMonth as jest.Mock;
 const mockedUseCategoryMonths = useCategoryMonths as jest.Mock;
+const mockedUseTransactions = useTransactions as jest.Mock;
 const mockedUseCreateTransaction = useCreateTransaction as jest.Mock;
 const mockedRouterBack = router.back as jest.Mock;
 
@@ -82,6 +87,12 @@ beforeEach(() => {
   });
   mockedUseCategoryMonths.mockReturnValue({
     data: [shoppingCategoryMonth, eatingOutCategoryMonth],
+    isLoading: false,
+    isError: false,
+    refetch: jest.fn(),
+  });
+  mockedUseTransactions.mockReturnValue({
+    data: [],
     isLoading: false,
     isError: false,
     refetch: jest.fn(),
@@ -160,10 +171,95 @@ describe('AddTransactionScreen', () => {
     expect(screen.queryByTestId('keypad-confirm')).toBeNull();
   });
 
-  it('preselects the first active expense category', async () => {
+  it('preselects the first active expense category when no transactions exist yet this month', async () => {
     await renderScreen();
 
     expect(screen.getByText('Shopping')).toBeTruthy();
+  });
+
+  it('preselects the category used by the most recently dated transaction this month, over the first-in-list default', async () => {
+    mockedUseTransactions.mockReturnValue({
+      // transactions(month) is ordered date DESC, createdAt DESC -- date is the primary key, so
+      // [0] here is 't-2' (dated 09-02, the later date), not necessarily whichever was entered
+      // most recently. Fixture ordering matches that real contract, not creation order.
+      data: [
+        {
+          id: 't-2',
+          amountCents: 1200,
+          date: '2026-09-02',
+          merchant: 'Cafe',
+          note: null,
+          direction: 'EXPENSE',
+          categoryMonth: eatingOutCategoryMonth,
+        },
+        {
+          id: 't-1',
+          amountCents: 968,
+          date: '2026-09-01',
+          merchant: 'Continente',
+          note: null,
+          direction: 'EXPENSE',
+          categoryMonth: shoppingCategoryMonth,
+        },
+      ],
+      isLoading: false,
+      isError: false,
+      refetch: jest.fn(),
+    });
+
+    await renderScreen();
+
+    expect(screen.getByText('Eating Out')).toBeTruthy();
+  });
+
+  it('falls back to the first active expense category if the most recently dated transaction\'s category is no longer active this month', async () => {
+    mockedUseTransactions.mockReturnValue({
+      data: [
+        {
+          id: 't-1',
+          amountCents: 500,
+          date: '2026-09-01',
+          merchant: 'Gone',
+          note: null,
+          direction: 'EXPENSE',
+          categoryMonth: { ...eatingOutCategoryMonth, id: 'cm-removed' },
+        },
+      ],
+      isLoading: false,
+      isError: false,
+      refetch: jest.fn(),
+    });
+
+    await renderScreen();
+
+    expect(screen.getByText('Shopping')).toBeTruthy();
+  });
+
+  it('still lets the user pick a different category, overriding the recently-dated-transaction default', async () => {
+    mockedUseTransactions.mockReturnValue({
+      data: [
+        {
+          id: 't-1',
+          amountCents: 968,
+          date: '2026-09-02',
+          merchant: 'Continente',
+          note: null,
+          direction: 'EXPENSE',
+          categoryMonth: shoppingCategoryMonth,
+        },
+      ],
+      isLoading: false,
+      isError: false,
+      refetch: jest.fn(),
+    });
+
+    await renderScreen();
+    expect(screen.getByText('Shopping')).toBeTruthy();
+
+    await fireEvent.press(screen.getByTestId('category-pill'));
+    await fireEvent.press(screen.getByTestId('existing-category-c-eating-out'));
+
+    expect(screen.getByText('Eating Out')).toBeTruthy();
   });
 
   it('renders the category pill label in Fredoka regular', async () => {

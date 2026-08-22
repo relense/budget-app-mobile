@@ -350,12 +350,41 @@ default.
       label → "Total category budget" (Edit Category's own "Total budget"
       label was left as-is — only Add Category was asked for). Follow-up in
       the same pass: an Available row whose `actualAmountCents` exceeds its
-      `monthlyBudgetCents` now shows "Overspent" instead of "Available" as
-      its left-side subtitle, in the same red (`colors.button.deleteBackground`)
-      already used for delete/error text elsewhere, instead of the plain
-      gray every other row uses — `ListRow` gained an optional
-      `subtitleColor` prop for this (defaults to the existing gray). 267
-      tests total across 33 suites.
+      `monthlyBudgetCents` showed "Overspent" instead of "Available" as its
+      left-side subtitle, in the same red (`colors.button.deleteBackground`)
+      already used for delete/error text elsewhere — reverted immediately
+      after (see below), so this never shipped past this same PR. 267 tests
+      total across 33 suites.
+- [x] Reverted the "Overspent"/red-subtitle state above before it ever
+      merged — decided the spent (headline) vs. budget (gray, secondary)
+      figures already make an over-budget category obvious at a glance, no
+      separate state needed. The Available row's left-side subtitle is now
+      just the static label "Budget" (was "Available"/"Overspent"
+      depending on state); `ListRow`'s `subtitleColor` prop was removed
+      again along with it, since nothing else used it.
+- [x] Add Transaction defaults the category pill to whatever category the
+      most recently *dated* transaction used this month, instead of always
+      the first active expense category — `app/(app)/add-transaction.tsx`
+      now also calls `useTransactions(month)` and reads
+      `[0].categoryMonth.id` as the default, falling back to first-in-list
+      if that category is no longer active this month or no transactions
+      exist yet. `transactions(month)` is ordered `date DESC, createdAt
+      DESC` server-side (`docs/SERVICES.md`) — **date is the primary sort
+      key, createdAt only breaks ties within the same date** — so `[0]` is
+      the transaction dated latest, not necessarily the one entered most
+      recently; a backdated entry (logging a purchase from a few days ago)
+      won't become the default even though it was just created. The API
+      doesn't expose `createdAt` to this client at all, so true
+      creation-order isn't available — this is the closest approximation
+      the schema allows, and matches the common case (transactions logged
+      close to when they happened). An explicit user pick (via the category
+      picker) still always wins over this default. Loading: `transactionsQuery`
+      was added to the screen's loading/error gating to avoid a flash of
+      the wrong default once it resolves -- a no-op in the common case
+      (navigating from Budget Home, which already warmed the same
+      `['transactions', month]` cache), but a real added wait in a cold-start
+      path that skips Home (e.g. a very fast tap before Home's own fetch
+      lands). 270 tests total across 33 suites.
 
 **Scaffold caveats worth knowing before the next `npm install` in this
 repo** (SDK 57 is very new — pin these deliberately, don't let npm grab
