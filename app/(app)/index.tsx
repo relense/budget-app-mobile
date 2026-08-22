@@ -256,12 +256,24 @@ export default function HomeScreen() {
             color={colors.text.primary}
           />
         ) : currentMonthQuery.isError || headerQuery.isError ? (
-          <Text
-            testID="header-amount-error"
-            style={[styles.headerAmount, { color: colors.button.deleteBackground }]}
+          <Pressable
+            testID="header-amount-retry"
+            onPress={() => {
+              currentMonthQuery.refetch();
+              // headerQuery is one of expenseCategoryMonths/recurringExpenses/
+              // incomeCategoryMonths (gated on `month` being known) or bankBalance (never
+              // month-gated) depending on headerMetric -- only refetch it if it's actually
+              // enabled right now.
+              if (month || headerMetric === 'TOTAL_BALANCE') headerQuery.refetch();
+            }}
           >
-            —
-          </Text>
+            <Text
+              testID="header-amount-error"
+              style={[styles.headerAmount, { color: colors.button.deleteBackground }]}
+            >
+              —
+            </Text>
+          </Pressable>
         ) : (
           <Text style={[styles.headerAmount, { color: colors.text.primary }]}>
             {formatCents(headerAmountCents)}

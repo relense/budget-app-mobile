@@ -256,7 +256,7 @@ default.
       whichever query (current month vs. the active tab's own query)
       actually failed. Add/Edit Transaction and Add Category keep the modal
       grabber visible and add a retry button where there previously was
-      none. 248 tests total across 33 suites.
+      none. 249 tests total across 33 suites.
 
 **Scaffold caveats worth knowing before the next `npm install` in this
 repo** (SDK 57 is very new — pin these deliberately, don't let npm grab

@@ -406,6 +406,18 @@ describe('HomeScreen', () => {
     expect(screen.queryByText('€0.00')).toBeNull();
   });
 
+  it('retries the backing query when the header amount error placeholder is tapped', async () => {
+    const refetch = jest.fn();
+    mockedUseBankBalance.mockReturnValue({ data: undefined, isLoading: false, isError: true, refetch });
+    await renderHomeScreen();
+
+    await fireEvent.press(screen.getByText('Available Budgeted'));
+    await fireEvent.press(screen.getByText('Total Balance'));
+    await fireEvent.press(screen.getByTestId('header-amount-retry'));
+
+    expect(refetch).toHaveBeenCalledTimes(1);
+  });
+
   it('remounts the category rows when the screen regains focus, so a swiped-open row resets', async () => {
     await renderHomeScreen();
 

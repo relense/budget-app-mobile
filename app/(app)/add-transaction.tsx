@@ -181,11 +181,13 @@ export default function AddTransactionScreen() {
 
   if (!catalogReady) {
     return (
-      <View
-        testID="add-transaction-loading"
-        style={[styles.container, styles.centered, { backgroundColor: colors.background.screen }]}
-      >
-        <ActivityIndicator color={colors.text.primary} />
+      <View style={[styles.container, { backgroundColor: colors.background.screen }]}>
+        <View style={styles.grabberRow}>
+          <View style={[styles.grabber, { backgroundColor: colors.segment.track }]} />
+        </View>
+        <View testID="add-transaction-loading" style={[styles.centered, { flex: 1 }]}>
+          <ActivityIndicator color={colors.text.primary} />
+        </View>
       </View>
     );
   }
