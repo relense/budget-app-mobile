@@ -725,6 +725,21 @@ default.
       overlay pattern and would have the identical latent bug even
       though it hadn't been reported here specifically. 400 tests total
       across 41 suites.
+- [x] Swapped the `star` expense icon option for `home` — flagged by the
+      user as an icon they didn't recognize the meaning of, with a house
+      icon being the more useful option to offer (rent/mortgage-type
+      categories). `EXPENSE_ICON_PALETTE` now offers `home` in `star`'s
+      old slot (same color, `#EEF3C8`); `CategoryIcon.tsx`'s `ICON_MAP`
+      gained `home: 'home-variant'`. The `star: 'star'` mapping is kept
+      (not deleted) even though it's no longer offered in the picker —
+      `icon` is a persisted free-text `String` on `Category` with no
+      backend enum (confirmed against `docs/PLAN.md`'s schema), so any
+      category already saved with `icon: 'star'` still needs to resolve
+      to a real glyph rather than falling back to the generic one. 400
+      tests total across 41 suites (no new tests needed — existing
+      palette/picker tests were already icon-agnostic, aside from one
+      `edit-category.test.tsx` assertion updated from `star`/`#EEF3C8`
+      to `home`/`#EEF3C8`).
 
 **Scaffold caveats worth knowing before the next `npm install` in this
 repo** (SDK 57 is very new — pin these deliberately, don't let npm grab

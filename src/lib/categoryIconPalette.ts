@@ -13,7 +13,7 @@ export const EXPENSE_ICON_PALETTE: { icon: string; color: string }[] = [
   { icon: 'fuel', color: '#F3E8C8' },
   { icon: 'road', color: '#C8D3F3' },
   { icon: 'heart', color: '#F3C8C8' },
-  { icon: 'star', color: '#EEF3C8' },
+  { icon: 'home', color: '#EEF3C8' },
   { icon: 'book', color: '#C8E3F3' },
   { icon: 'shirt', color: '#DEC8F3' },
   { icon: 'coffee', color: '#F3C8D9' },

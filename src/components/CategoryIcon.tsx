@@ -15,7 +15,11 @@ const ICON_MAP: Record<string, IconName> = {
   fuel: 'gas-station',
   road: 'road-variant',
   heart: 'heart',
+  // 'star' is no longer offered in EXPENSE_ICON_PALETTE (replaced by 'home') but the mapping
+  // stays -- it's a persisted DB value, and any category that already has icon: 'star' still
+  // needs to resolve to a real glyph instead of falling back to the generic one.
   star: 'star',
+  home: 'home-variant',
   book: 'book-open-variant',
   shirt: 'tshirt-crew',
   coffee: 'coffee',

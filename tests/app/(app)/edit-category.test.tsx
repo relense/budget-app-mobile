@@ -241,7 +241,7 @@ describe('EditCategoryScreen', () => {
     await fireEvent.press(screen.getByTestId('icon-pill'));
     expect(screen.getByTestId('icon-picker-grid')).toBeTruthy();
 
-    await fireEvent.press(screen.getByTestId('icon-option-star'));
+    await fireEvent.press(screen.getByTestId('icon-option-home'));
     expect(screen.queryByTestId('icon-picker-grid')).toBeNull();
 
     await fireEvent.press(screen.getByTestId('keypad-confirm'));
@@ -249,7 +249,7 @@ describe('EditCategoryScreen', () => {
     expect(updateCategoryMutateAsync).toHaveBeenCalledWith({
       categoryId: 'c-1',
       name: 'Shopping',
-      icon: 'star',
+      icon: 'home',
       color: '#EEF3C8',
       budgetType: 'NEED',
       direction: 'EXPENSE',
