@@ -1,15 +1,33 @@
 import {
   addCategoryToMonth,
+  addCategoryToMonthMutationFn,
   createCategoryWithBudget,
+  createCategoryWithBudgetMutationFn,
   removeCategoryFromMonth,
+  removeCategoryFromMonthMutationFn,
   updateCategory,
   updateCategoryMonthBudget,
+  updateCategoryMonthBudgetMutationFn,
+  updateCategoryMutationFn,
 } from '../../../src/api/categoryMutations';
 import { graphqlRequest } from '../../../src/api/graphqlClient';
+import type { RequestWithAuth } from '../../../src/auth/AuthContext';
 
 jest.mock('../../../src/api/graphqlClient');
 
 const mockedGraphqlRequest = graphqlRequest as jest.Mock;
+
+// Simulates AuthContext's real requestWithAuth on the success path: runs `request` with a
+// known token and returns its result. Lets these tests verify each *MutationFn actually routes
+// through requestWithAuth (asserting it was called, and with what token) instead of calling
+// graphqlRequest/the plain function directly -- the exact wiring a session-refresh regression
+// could silently break, and which no screen test can catch since they all mock this whole
+// module away.
+function fakeRequestWithAuth(): { requestWithAuth: RequestWithAuth; token: string } {
+  const token = 'fake-access-token';
+  const requestWithAuth: RequestWithAuth = jest.fn((request) => request(token));
+  return { requestWithAuth, token };
+}
 
 describe('createCategoryWithBudget', () => {
   beforeEach(() => {
@@ -181,6 +199,117 @@ describe('removeCategoryFromMonth', () => {
       {
         categoryMonthId: 'cm-1',
       },
+    );
+  });
+});
+
+describe('*MutationFn wiring (requestWithAuth)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('createCategoryWithBudgetMutationFn routes both calls through requestWithAuth', async () => {
+    mockedGraphqlRequest.mockResolvedValueOnce({ createCategory: { id: 'cat-1' } });
+    mockedGraphqlRequest.mockResolvedValueOnce({ addCategoryToMonth: { id: 'cm-1' } });
+    const { requestWithAuth, token } = fakeRequestWithAuth();
+
+    await createCategoryWithBudgetMutationFn(requestWithAuth)({
+      name: 'Shopping',
+      icon: 'cart',
+      color: '#4CAF50',
+      budgetType: 'NEED',
+      month: '2026-09',
+      monthlyBudgetCents: 70000,
+    });
+
+    expect(requestWithAuth).toHaveBeenCalledTimes(1);
+    expect(mockedGraphqlRequest).toHaveBeenNthCalledWith(
+      1,
+      expect.any(String),
+      token,
+      expect.stringContaining('createCategory'),
+      expect.anything(),
+    );
+    expect(mockedGraphqlRequest).toHaveBeenNthCalledWith(
+      2,
+      expect.any(String),
+      token,
+      expect.stringContaining('addCategoryToMonth'),
+      expect.anything(),
+    );
+  });
+
+  it('addCategoryToMonthMutationFn routes the call through requestWithAuth', async () => {
+    mockedGraphqlRequest.mockResolvedValueOnce({ addCategoryToMonth: { id: 'cm-1' } });
+    const { requestWithAuth, token } = fakeRequestWithAuth();
+
+    await addCategoryToMonthMutationFn(requestWithAuth)({
+      categoryId: 'cat-1',
+      month: '2026-09',
+      monthlyBudgetCents: 5000,
+    });
+
+    expect(requestWithAuth).toHaveBeenCalledTimes(1);
+    expect(mockedGraphqlRequest).toHaveBeenCalledWith(
+      expect.any(String),
+      token,
+      expect.stringContaining('addCategoryToMonth'),
+      expect.objectContaining({ categoryId: 'cat-1' }),
+    );
+  });
+
+  it('updateCategoryMonthBudgetMutationFn routes the call through requestWithAuth', async () => {
+    mockedGraphqlRequest.mockResolvedValueOnce({ updateCategoryMonthBudget: { id: 'cm-1' } });
+    const { requestWithAuth, token } = fakeRequestWithAuth();
+
+    await updateCategoryMonthBudgetMutationFn(requestWithAuth)({
+      categoryMonthId: 'cm-1',
+      monthlyBudgetCents: 12000,
+    });
+
+    expect(requestWithAuth).toHaveBeenCalledTimes(1);
+    expect(mockedGraphqlRequest).toHaveBeenCalledWith(
+      expect.any(String),
+      token,
+      expect.stringContaining('updateCategoryMonthBudget'),
+      expect.objectContaining({ categoryMonthId: 'cm-1' }),
+    );
+  });
+
+  it('updateCategoryMutationFn routes the call through requestWithAuth', async () => {
+    mockedGraphqlRequest.mockResolvedValueOnce({ updateCategory: { id: 'cat-1' } });
+    const { requestWithAuth, token } = fakeRequestWithAuth();
+
+    await updateCategoryMutationFn(requestWithAuth)({
+      categoryId: 'cat-1',
+      name: 'Groceries',
+      icon: 'cart',
+      color: '#4CAF50',
+      budgetType: 'NEED',
+      direction: 'EXPENSE',
+    });
+
+    expect(requestWithAuth).toHaveBeenCalledTimes(1);
+    expect(mockedGraphqlRequest).toHaveBeenCalledWith(
+      expect.any(String),
+      token,
+      expect.stringContaining('updateCategory'),
+      expect.objectContaining({ id: 'cat-1' }),
+    );
+  });
+
+  it('removeCategoryFromMonthMutationFn routes the call through requestWithAuth', async () => {
+    mockedGraphqlRequest.mockResolvedValueOnce({ removeCategoryFromMonth: true });
+    const { requestWithAuth, token } = fakeRequestWithAuth();
+
+    await removeCategoryFromMonthMutationFn(requestWithAuth)({ categoryMonthId: 'cm-1' });
+
+    expect(requestWithAuth).toHaveBeenCalledTimes(1);
+    expect(mockedGraphqlRequest).toHaveBeenCalledWith(
+      expect.any(String),
+      token,
+      expect.stringContaining('removeCategoryFromMonth'),
+      { categoryMonthId: 'cm-1' },
     );
   });
 });

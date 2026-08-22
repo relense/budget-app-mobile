@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
-import { useAuth } from '../auth/AuthContext';
+import { useAuth, type RequestWithAuth } from '../auth/AuthContext';
 import { getApiUrl } from '../lib/apiUrl';
 import { graphqlRequest } from './graphqlClient';
 import type { BudgetType, Direction } from './types';
@@ -161,13 +161,40 @@ export async function createCategoryWithBudget(
   });
 }
 
+// Plain, requestWithAuth-taking mutation functions -- see the comment above the plain
+// accessToken-taking functions (this file) / the queryFn helpers in budgetHomeQueries.ts for
+// why (unit-testable without renderHook).
+export function createCategoryWithBudgetMutationFn(requestWithAuth: RequestWithAuth) {
+  return (input: CreateCategoryWithBudgetInput) =>
+    requestWithAuth((token) => createCategoryWithBudget(getApiUrl(), token, input));
+}
+
+export function addCategoryToMonthMutationFn(requestWithAuth: RequestWithAuth) {
+  return (input: AddCategoryToMonthInput) =>
+    requestWithAuth((token) => addCategoryToMonth(getApiUrl(), token, input));
+}
+
+export function updateCategoryMonthBudgetMutationFn(requestWithAuth: RequestWithAuth) {
+  return (input: UpdateCategoryMonthBudgetInput) =>
+    requestWithAuth((token) => updateCategoryMonthBudget(getApiUrl(), token, input));
+}
+
+export function updateCategoryMutationFn(requestWithAuth: RequestWithAuth) {
+  return (input: UpdateCategoryInput) =>
+    requestWithAuth((token) => updateCategory(getApiUrl(), token, input));
+}
+
+export function removeCategoryFromMonthMutationFn(requestWithAuth: RequestWithAuth) {
+  return (input: RemoveCategoryFromMonthInput) =>
+    requestWithAuth((token) => removeCategoryFromMonth(getApiUrl(), token, input));
+}
+
 export function useCreateCategoryWithBudget() {
   const { requestWithAuth } = useAuth();
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (input: CreateCategoryWithBudgetInput) =>
-      requestWithAuth((token) => createCategoryWithBudget(getApiUrl(), token, input)),
+    mutationFn: createCategoryWithBudgetMutationFn(requestWithAuth),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['categoryMonths'] });
       // This mutation also creates a brand-new catalog entry (unlike useAddCategoryToMonth
@@ -185,8 +212,7 @@ export function useAddCategoryToMonth() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (input: AddCategoryToMonthInput) =>
-      requestWithAuth((token) => addCategoryToMonth(getApiUrl(), token, input)),
+    mutationFn: addCategoryToMonthMutationFn(requestWithAuth),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['categoryMonths'] });
     },
@@ -200,8 +226,7 @@ export function useUpdateCategoryMonthBudget() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (input: UpdateCategoryMonthBudgetInput) =>
-      requestWithAuth((token) => updateCategoryMonthBudget(getApiUrl(), token, input)),
+    mutationFn: updateCategoryMonthBudgetMutationFn(requestWithAuth),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['categoryMonths'] });
     },
@@ -216,8 +241,7 @@ export function useUpdateCategory() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (input: UpdateCategoryInput) =>
-      requestWithAuth((token) => updateCategory(getApiUrl(), token, input)),
+    mutationFn: updateCategoryMutationFn(requestWithAuth),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['categoryMonths'] });
       queryClient.invalidateQueries({ queryKey: ['categories'] });
@@ -233,8 +257,7 @@ export function useRemoveCategoryFromMonth() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (input: RemoveCategoryFromMonthInput) =>
-      requestWithAuth((token) => removeCategoryFromMonth(getApiUrl(), token, input)),
+    mutationFn: removeCategoryFromMonthMutationFn(requestWithAuth),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['categoryMonths'] });
       queryClient.invalidateQueries({ queryKey: ['categories'] });
