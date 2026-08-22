@@ -10,7 +10,6 @@ export function ListRow({
   subtitle,
   amountText,
   secondaryAmountText,
-  percentText,
 }: {
   icon: ReactNode;
   circleColor: string;
@@ -18,7 +17,6 @@ export function ListRow({
   subtitle?: string;
   amountText: string;
   secondaryAmountText?: string;
-  percentText?: string;
 }) {
   const { colors } = useTheme();
 
@@ -39,9 +37,6 @@ export function ListRow({
           <Text style={[styles.subtitle, { color: colors.text.secondary }]}>
             {secondaryAmountText}
           </Text>
-        ) : null}
-        {percentText ? (
-          <Text style={[styles.subtitle, { color: colors.text.secondary }]}>{percentText}</Text>
         ) : null}
       </View>
     </View>

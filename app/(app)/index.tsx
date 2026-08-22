@@ -19,7 +19,6 @@ import { RetryableError } from '../../src/components/RetryableError';
 import { SwipeableRow } from '../../src/components/SwipeableRow';
 import {
   mostRecentDate,
-  percentSpent,
   sumActualCents,
   sumAvailableBudgetedCents,
   sumRecurringCents,
@@ -170,8 +169,8 @@ export default function HomeScreen() {
             circleColor={cm.category.color}
             title={cm.category.name}
             subtitle="Available"
-            amountText={formatCents(cm.monthlyBudgetCents - cm.actualAmountCents)}
-            percentText={`${percentSpent(cm.actualAmountCents, cm.monthlyBudgetCents)}%`}
+            amountText={formatCents(cm.actualAmountCents)}
+            secondaryAmountText={formatCents(cm.monthlyBudgetCents)}
           />
         </SwipeableRow>
       ));
@@ -200,10 +199,6 @@ export default function HomeScreen() {
             title={t.merchant ?? t.categoryMonth.category.name}
             subtitle={formatDate(t.date)}
             amountText={formatCents(t.amountCents)}
-            // The category's cumulative spend vs. its budget -- not this one transaction's own
-            // amount vs. budget, which could never show over 100% for a category that's only
-            // over budget once several transactions are added up.
-            percentText={`${percentSpent(t.categoryMonth.actualAmountCents, t.categoryMonth.monthlyBudgetCents)}%`}
           />
         </SwipeableRow>
       ));
@@ -351,7 +346,7 @@ export default function HomeScreen() {
 
       <ScrollView contentContainerStyle={styles.listContent}>
         {tab === 'AVAILABLE' ? (
-          <AddRow label="New budget category" onPress={() => router.push('/add-category')} />
+          <AddRow label="New Category" onPress={() => router.push('/add-category')} />
         ) : null}
         {tab === 'RECURRENT' ? <AddRow label="New recurrent expense" /> : null}
         {tab === 'INCOME' ? <AddRow label="New income" /> : null}
