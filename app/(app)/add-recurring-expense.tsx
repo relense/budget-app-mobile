@@ -28,15 +28,16 @@ import {
   backspaceAmount,
 } from '../../src/lib/amountInput';
 import {
-  appendDueDayDigit,
-  backspaceDueDay,
-  formatTypedDueDay,
-  isValidDueDay,
-} from '../../src/lib/dueDayInput';
+  appendDayDigit,
+  backspaceDay,
+  formatMonthYearLabel,
+  formatTypedDay,
+  isCompleteDayDigits,
+} from '../../src/lib/dateInput';
 import { budgetTypeForCategory } from '../../src/lib/recurringBudgetType';
 import { useTheme } from '../../src/theme/ThemeProvider';
 
-const DUE_DAY_PLACEHOLDER = 'Due date day';
+const DUE_DAY_UNSET_PLACEHOLDER = '--';
 const CATALOG_LOAD_ERROR = "Couldn't load your budget categories.";
 const GENERIC_ERROR_MESSAGE = 'Something went wrong. Please try again.';
 
@@ -59,17 +60,20 @@ export default function AddRecurringExpenseScreen() {
 
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
   const [name, setName] = useState('');
-  // Same split as add-transaction.tsx's date entry: `committedDueDay` is the last value the
-  // user actually landed on, `dueDayDigits` is a scratch buffer that resets to '' every time
-  // day-entry mode is (re-)entered, so the first digit typed always starts fresh instead of
-  // appending onto whatever was there before -- the display falls back to `committedDueDay`
-  // only while the buffer is still empty.
-  const [committedDueDay, setCommittedDueDay] = useState('');
+  // dueDay has no natural pre-filled value on Add (unlike Edit), so a plain append-only buffer
+  // is enough -- no "first touch replaces/clears" guard needed, the empty starting state
+  // already behaves like a fresh field. Validated against the real day count of the current
+  // budget month (appendDayDigit/daysInCurrentMonth, from dateInput.ts -- the same helpers
+  // add-transaction.tsx uses for its date) even though RecurringExpenseInput.dueDay itself is
+  // just a bare 1-31 Int with no stored month/year -- this is purely a display/typing
+  // constraint tied to "the month this bill is being added in", not a schema change.
   const [dueDayDigits, setDueDayDigits] = useState('');
   const [amountText, setAmountText] = useState('');
   // Whether the shared keypad is in day-entry mode (its calendar-toggle key) instead of
   // amount-entry -- same mechanism add-transaction.tsx uses for its date, see AmountKeypad's
-  // dateMode/onToggleDateMode props.
+  // dateMode/onToggleDateMode props. Unlike add-transaction.tsx, the amount display never
+  // hides/swaps for the due-date row -- both stay visible at all times, dateMode only decides
+  // which one the keypad's digits/backspace currently affect.
   const [dateMode, setDateMode] = useState(false);
   const [overlay, setOverlay] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
@@ -90,10 +94,7 @@ export default function AddRecurringExpenseScreen() {
   const selectedCategory: Category | null =
     expenseCategories.find((c) => c.id === selectedCategoryId) ?? expenseCategories[0] ?? null;
 
-  // Whatever's currently displayed/would be submitted for the due day: the live buffer while
-  // something's been typed this time in date mode, otherwise the last committed value.
-  const dueDayDisplayDigits = dueDayDigits === '' ? committedDueDay : dueDayDigits;
-  const dueDay = isValidDueDay(dueDayDisplayDigits) ? Number(dueDayDisplayDigits) : null;
+  const dueDay = isCompleteDayDigits(dueDayDigits) ? Number(dueDayDigits) : null;
 
   const canSubmit =
     catalogReady &&
@@ -105,7 +106,7 @@ export default function AddRecurringExpenseScreen() {
 
   function handleDigit(digit: string) {
     if (dateMode) {
-      setDueDayDigits((digits) => appendDueDayDigit(digits, digit));
+      if (month) setDueDayDigits((digits) => appendDayDigit(digits, digit, month));
     } else {
       setAmountText((text) => appendDigit(text, digit));
     }
@@ -118,18 +119,10 @@ export default function AddRecurringExpenseScreen() {
 
   function handleBackspace() {
     if (dateMode) {
-      setDueDayDigits((digits) => backspaceDueDay(digits));
+      setDueDayDigits((digits) => backspaceDay(digits));
     } else {
       setAmountText((text) => backspaceAmount(text));
     }
-  }
-
-  function handleToggleDateMode() {
-    if (dateMode && dueDayDigits !== '') {
-      setCommittedDueDay(dueDayDigits);
-    }
-    setDueDayDigits('');
-    setDateMode((current) => !current);
   }
 
   async function handleConfirm() {
@@ -230,38 +223,22 @@ export default function AddRecurringExpenseScreen() {
           />
         </View>
 
-        {dateMode ? (
-          <Text
-            style={[
-              typography.scale.listSubtitle,
-              styles.amountLabel,
-              { color: colors.text.secondary },
-            ]}
-          >
-            Due day
-          </Text>
-        ) : null}
         <Text style={styles.amountRow}>
-          {dateMode ? null : (
-            <Text style={[styles.currencyPrefix, { color: colors.text.secondary }]}>€</Text>
-          )}
+          <Text style={[styles.currencyPrefix, { color: colors.text.secondary }]}>€</Text>
           <Text
             testID="calculator-value"
-            style={[
-              typography.scale.calculatorAmount,
-              {
-                color:
-                  dateMode && dueDayDisplayDigits === ''
-                    ? colors.text.placeholder
-                    : colors.text.primary,
-              },
-            ]}
+            style={[typography.scale.calculatorAmount, { color: colors.text.primary }]}
           >
-            {dateMode
-              ? dueDayDisplayDigits === ''
-                ? DUE_DAY_PLACEHOLDER
-                : formatTypedDueDay(dueDayDisplayDigits)
-              : amountText || '0'}
+            {amountText || '0'}
+          </Text>
+        </Text>
+
+        <Text style={styles.dueDateRow}>
+          <Text testID="due-day-value" style={[styles.dueDateText, { color: colors.text.placeholder }]}>
+            {dueDayDigits === '' ? DUE_DAY_UNSET_PLACEHOLDER : formatTypedDay(dueDayDigits)}
+          </Text>
+          <Text testID="due-month-year-value" style={[styles.dueDateText, { color: colors.text.primary }]}>
+            {month ? ` ${formatMonthYearLabel(month)}` : ''}
           </Text>
         </Text>
 
@@ -279,7 +256,7 @@ export default function AddRecurringExpenseScreen() {
             onConfirm={handleConfirm}
             confirmDisabled={!canSubmit}
             dateMode={dateMode}
-            onToggleDateMode={handleToggleDateMode}
+            onToggleDateMode={() => setDateMode((current) => !current)}
           />
         </View>
       </View>
@@ -371,16 +348,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     fontSize: 16,
   },
-  amountLabel: {
+  amountRow: {
     textAlign: 'center',
     marginTop: 4,
   },
-  amountRow: {
+  currencyPrefix: {
+    fontSize: 26,
+    fontFamily: 'Fredoka_400Regular',
+  },
+  dueDateRow: {
     textAlign: 'center',
     marginBottom: 8,
   },
-  currencyPrefix: {
-    fontSize: 26,
+  dueDateText: {
+    fontSize: 16,
     fontFamily: 'Fredoka_400Regular',
   },
   errorText: {

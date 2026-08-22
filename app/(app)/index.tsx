@@ -11,7 +11,11 @@ import {
   useRecurringExpenses,
   useTransactions,
 } from '../../src/api/budgetHomeQueries';
-import { useMarkRecurringPaid } from '../../src/api/recurringExpenseMutations';
+import {
+  useMarkRecurringPaid,
+  useUnmarkRecurringPaid,
+} from '../../src/api/recurringExpenseMutations';
+import type { RecurringExpense } from '../../src/api/types';
 import { useAuth } from '../../src/auth/AuthContext';
 import { AddRow } from '../../src/components/AddRow';
 import { CategoryIcon } from '../../src/components/CategoryIcon';
@@ -109,6 +113,7 @@ export default function HomeScreen() {
   }, [toastMessage]);
 
   const markRecurringPaid = useMarkRecurringPaid();
+  const unmarkRecurringPaid = useUnmarkRecurringPaid();
 
   const currentMonthQuery = useCurrentMonth();
   const month = currentMonthQuery.data?.month;
@@ -160,17 +165,23 @@ export default function HomeScreen() {
           ? recurringExpenses
           : incomeCategoryMonths;
 
-  // Tapping a Recurrent row's icon marks it paid directly, one plain full-amount transaction
-  // dated today -- no amount/date adjustment, no split-payment support yet (that's deferred,
-  // see PROGRESS-MOBILE.md). Only wired for the unpaid->paid direction; unmarking still goes
-  // through the swipe-to-edit drawer's Paid/Unpaid pill.
-  async function handlePayFromIcon(recurringExpenseId: string, amountCents: number) {
+  // Tapping a Recurrent row's icon toggles paid state directly, both directions. Unpaid->paid:
+  // one plain full-amount transaction dated today -- no amount/date adjustment, no
+  // split-payment support yet (that's deferred, see PROGRESS-MOBILE.md). Paid->unpaid: deletes
+  // every transaction linked to it this month (same no-backend-unmark workaround as the
+  // swipe-to-edit drawer's Paid/Unpaid pill -- reuses the same useUnmarkRecurringPaid hook, so
+  // the ['recurringExpenses'] invalidation this needs isn't duplicated).
+  async function handleToggleIconPaid(re: RecurringExpense) {
     try {
-      await markRecurringPaid.mutateAsync({
-        recurringExpenseId,
-        amountCents,
-        date: todayIsoDate(),
-      });
+      if (re.paidThisMonth) {
+        await unmarkRecurringPaid.mutateAsync(re.transactions.map((t) => t.id));
+      } else {
+        await markRecurringPaid.mutateAsync({
+          recurringExpenseId: re.id,
+          amountCents: re.amountCents,
+          date: todayIsoDate(),
+        });
+      }
     } catch {
       setToastMessage(GENERIC_ERROR_MESSAGE);
     }
@@ -276,13 +287,8 @@ export default function HomeScreen() {
               subtitle={DUE_DATE_PLACEHOLDER}
               amountText={formatCents(re.amountCents)}
               secondaryAmountText={re.paidThisMonth ? 'Paid' : 'Unpaid'}
-              // Only wired when unpaid -- tapping the icon on an already-paid row does nothing
-              // here (unmarking is the swipe-to-edit drawer's job, via its Paid/Unpaid pill).
-              onIconPress={
-                re.paidThisMonth
-                  ? undefined
-                  : () => handlePayFromIcon(re.id, re.amountCents)
-              }
+              // Toggles both directions -- see handleToggleIconPaid.
+              onIconPress={() => handleToggleIconPaid(re)}
               iconTestID={`pay-icon-${re.id}`}
             />
           </SwipeableRow>

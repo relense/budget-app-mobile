@@ -7,6 +7,7 @@ const testSafeAreaMetrics = {
   insets: { top: 47, left: 0, right: 0, bottom: 34 },
 };
 
+import { useCurrentMonth } from '../../../src/api/budgetHomeQueries';
 import { useCategories } from '../../../src/api/categoryQueries';
 import {
   useMarkRecurringPaid,
@@ -18,6 +19,7 @@ import { ThemeProvider } from '../../../src/theme/ThemeProvider';
 import { router, useLocalSearchParams } from 'expo-router';
 import EditRecurringExpenseScreen from '../../../app/(app)/edit-recurring-expense';
 
+jest.mock('../../../src/api/budgetHomeQueries');
 jest.mock('../../../src/api/categoryQueries');
 jest.mock('../../../src/api/recurringExpenseMutations');
 jest.mock('../../../src/lib/today', () => ({
@@ -28,6 +30,7 @@ jest.mock('expo-router', () => ({
   useLocalSearchParams: jest.fn(),
 }));
 
+const mockedUseCurrentMonth = useCurrentMonth as jest.Mock;
 const mockedUseCategories = useCategories as jest.Mock;
 const mockedUseUpdateRecurringExpense = useUpdateRecurringExpense as jest.Mock;
 const mockedUseMarkRecurringPaid = useMarkRecurringPaid as jest.Mock;
@@ -87,6 +90,13 @@ function renderScreen() {
 beforeEach(() => {
   jest.clearAllMocks();
   mockedUseLocalSearchParams.mockReturnValue(baseParams);
+  // September (30 days) -- deliberately not 31, same reasoning as add-recurring-expense.test.tsx.
+  mockedUseCurrentMonth.mockReturnValue({
+    data: { month: '2026-09', locked: false },
+    isLoading: false,
+    isError: false,
+    refetch: jest.fn(),
+  });
   mockedUseCategories.mockReturnValue({
     data: [shoppingCategory, housingCategory],
     isLoading: false,
@@ -113,22 +123,32 @@ beforeEach(() => {
 });
 
 describe('EditRecurringExpenseScreen', () => {
-  it('pre-fills name and amount from route params, and shows the pre-filled due day once toggled into day-entry mode', async () => {
+  it('shows a loading state while the current month is loading', async () => {
+    mockedUseCurrentMonth.mockReturnValue({ data: undefined, isLoading: true, isError: false });
+
+    await renderScreen();
+
+    expect(screen.getByTestId('edit-recurring-expense-loading')).toBeTruthy();
+    expect(screen.queryByTestId('keypad-confirm')).toBeNull();
+  });
+
+  it('pre-fills name, amount, and due day from route params -- amount and the due-date row are both visible at once, with no "Amount" label', async () => {
     await renderScreen();
 
     expect(screen.getByTestId('recurring-name-input').props.value).toBe('Water');
-    expect(screen.getByText('21.96')).toBeTruthy();
+    expect(screen.queryByText('Amount')).toBeNull();
+    expect(screen.getByTestId('calculator-value').props.children).toBe('21.96');
+    expect(screen.getByTestId('due-day-value').props.children).toBe('10');
+    expect(screen.getByTestId('due-month-year-value').props.children).toBe(' Sep 2026');
+  });
+
+  it('toggling into day-entry mode does not hide or change the amount', async () => {
+    await renderScreen();
 
     await fireEvent.press(screen.getByTestId('keypad-toggle-date'));
 
-    expect(screen.getByTestId('calculator-value').props.children).toBe('10');
-  });
-
-  it('uses the same shared AmountKeypad as Add Category, with no redundant "Amount" label', async () => {
-    await renderScreen();
-
-    expect(screen.queryByText('Amount')).toBeNull();
-    expect(screen.getByTestId('keypad-toggle-date')).toBeTruthy();
+    expect(screen.getByTestId('calculator-value').props.children).toBe('21.96');
+    expect(screen.getByTestId('due-day-value').props.children).toBe('10');
   });
 
   it('the Paid/Unpaid pill is a full-width banner, not a small round pill', async () => {
@@ -258,14 +278,14 @@ describe('EditRecurringExpenseScreen', () => {
     expect(updateMutateAsync).toHaveBeenCalledWith(expect.objectContaining({ dueDay: 10 }));
   });
 
-  it('rejects a second due-day digit that would push the value past 31', async () => {
+  it('rejects a second due-day digit that would push the day past the current month\'s real day count (September has 30, not 31)', async () => {
     await renderScreen();
 
     await fireEvent.press(screen.getByTestId('keypad-toggle-date'));
     await fireEvent.press(screen.getByTestId('keypad-digit-3'));
-    await fireEvent.press(screen.getByTestId('keypad-digit-2'));
+    await fireEvent.press(screen.getByTestId('keypad-digit-1'));
 
-    expect(screen.getByTestId('calculator-value').props.children).toBe('3');
+    expect(screen.getByTestId('due-day-value').props.children).toBe('3');
   });
 
   it('pressing delete on the pre-filled due day clears it to blank (placeholder), not a no-op', async () => {
@@ -274,8 +294,7 @@ describe('EditRecurringExpenseScreen', () => {
     await fireEvent.press(screen.getByTestId('keypad-toggle-date'));
     await fireEvent.press(screen.getByTestId('keypad-backspace'));
 
-    expect(screen.getByText('Due date day')).toBeTruthy();
-    expect(screen.queryByTestId('calculator-value')?.props.children).not.toBe('10');
+    expect(screen.getByTestId('due-day-value').props.children).toBe('--');
   });
 
   it('pressing delete again once already blank keeps it blank, not an error', async () => {
@@ -285,7 +304,7 @@ describe('EditRecurringExpenseScreen', () => {
     await fireEvent.press(screen.getByTestId('keypad-backspace'));
     await fireEvent.press(screen.getByTestId('keypad-backspace'));
 
-    expect(screen.getByText('Due date day')).toBeTruthy();
+    expect(screen.getByTestId('due-day-value').props.children).toBe('--');
   });
 
   it('typing a new due day after clearing it, then deleting again, also shows blank', async () => {
@@ -294,11 +313,11 @@ describe('EditRecurringExpenseScreen', () => {
     await fireEvent.press(screen.getByTestId('keypad-toggle-date'));
     await fireEvent.press(screen.getByTestId('keypad-backspace'));
     await fireEvent.press(screen.getByTestId('keypad-digit-5'));
-    expect(screen.getByTestId('calculator-value').props.children).toBe('5');
+    expect(screen.getByTestId('due-day-value').props.children).toBe('5');
 
     await fireEvent.press(screen.getByTestId('keypad-backspace'));
 
-    expect(screen.getByText('Due date day')).toBeTruthy();
+    expect(screen.getByTestId('due-day-value').props.children).toBe('--');
   });
 
   it('re-entering day-entry mode after typing (without confirming) shows what was typed, not the original pre-filled value', async () => {
@@ -309,7 +328,7 @@ describe('EditRecurringExpenseScreen', () => {
     await fireEvent.press(screen.getByTestId('keypad-toggle-date'));
     await fireEvent.press(screen.getByTestId('keypad-toggle-date'));
 
-    expect(screen.getByTestId('calculator-value').props.children).toBe('7');
+    expect(screen.getByTestId('due-day-value').props.children).toBe('7');
   });
 
   it('saving with the due day left blank (cleared, never re-typed) sends the original due day, silently, with no error', async () => {

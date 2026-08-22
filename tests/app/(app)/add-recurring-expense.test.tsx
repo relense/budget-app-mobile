@@ -68,6 +68,8 @@ function renderScreen() {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  // September (30 days) -- deliberately not 31, so a "31" attempt or an "August/other month"
+  // day-count mixup would be caught by the reject-past-month-end test below.
   mockedUseCurrentMonth.mockReturnValue({
     data: { month: '2026-09', locked: false },
     isLoading: false,
@@ -147,22 +149,38 @@ describe('AddRecurringExpenseScreen', () => {
     expect(screen.queryByTestId('category-picker-backdrop')).toBeNull();
   });
 
-  it('uses the same shared AmountKeypad as Add Category -- toggling the calendar key switches the display to day-entry, showing a placeholder until a digit is typed, with no redundant "Amount" label', async () => {
+  it('shows the amount and the due-date row (day placeholder + fixed month/year) at the same time -- neither hides the other, and there is no "Amount" label', async () => {
     await renderScreen();
 
     expect(screen.queryByText('Amount')).toBeNull();
     expect(screen.getByTestId('calculator-value').props.children).toBe('0');
+    expect(screen.getByTestId('due-day-value').props.children).toBe('--');
+    expect(screen.getByTestId('due-month-year-value').props.children).toBe(' Sep 2026');
+  });
+
+  it('toggling into day-entry mode does not hide or change the amount -- only the due-day row updates as digits are typed', async () => {
+    await renderScreen();
 
     await fireEvent.press(screen.getByTestId('keypad-toggle-date'));
-
-    expect(screen.getByText('Due day')).toBeTruthy();
-    expect(screen.getByText('Due date day')).toBeTruthy();
-
     await fireEvent.press(screen.getByTestId('keypad-digit-1'));
     await fireEvent.press(screen.getByTestId('keypad-digit-0'));
 
-    expect(screen.getByTestId('calculator-value').props.children).toBe('10');
-    expect(screen.queryByText('Due date day')).toBeNull();
+    expect(screen.getByTestId('calculator-value').props.children).toBe('0');
+    expect(screen.getByTestId('due-day-value').props.children).toBe('10');
+    expect(screen.getByTestId('due-month-year-value').props.children).toBe(' Sep 2026');
+  });
+
+  it('typing an amount after typing a due day leaves the due day exactly as typed', async () => {
+    await renderScreen();
+
+    await fireEvent.press(screen.getByTestId('keypad-toggle-date'));
+    await fireEvent.press(screen.getByTestId('keypad-digit-1'));
+    await fireEvent.press(screen.getByTestId('keypad-digit-0'));
+    await fireEvent.press(screen.getByTestId('keypad-toggle-date'));
+    await fireEvent.press(screen.getByTestId('keypad-digit-5'));
+
+    expect(screen.getByTestId('calculator-value').props.children).toBe('5');
+    expect(screen.getByTestId('due-day-value').props.children).toBe('10');
   });
 
   it('keeps confirm disabled until name, a valid due day, and a positive amount are all set', async () => {
@@ -195,14 +213,14 @@ describe('AddRecurringExpenseScreen', () => {
     expect(screen.getByTestId('keypad-confirm').props.accessibilityState?.disabled).toBe(true);
   });
 
-  it('rejects a second due-day digit that would push the value past 31', async () => {
+  it('rejects a second due-day digit that would push the day past the current month\'s real day count (September has 30, not 31)', async () => {
     await renderScreen();
 
     await fireEvent.press(screen.getByTestId('keypad-toggle-date'));
     await fireEvent.press(screen.getByTestId('keypad-digit-3'));
-    await fireEvent.press(screen.getByTestId('keypad-digit-2'));
+    await fireEvent.press(screen.getByTestId('keypad-digit-1'));
 
-    expect(screen.getByTestId('calculator-value').props.children).toBe('3');
+    expect(screen.getByTestId('due-day-value').props.children).toBe('3');
   });
 
   it('the decimal-point key is a no-op while in day-entry mode', async () => {
@@ -213,7 +231,7 @@ describe('AddRecurringExpenseScreen', () => {
     await fireEvent.press(screen.getByTestId('keypad-decimal-point'));
     await fireEvent.press(screen.getByTestId('keypad-digit-0'));
 
-    expect(screen.getByTestId('calculator-value').props.children).toBe('10');
+    expect(screen.getByTestId('due-day-value').props.children).toBe('10');
   });
 
   it('has no Need/Want picker at all -- budgetType is derived from the selected category, not asked for', async () => {

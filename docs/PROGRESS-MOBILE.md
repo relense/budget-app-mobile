@@ -599,6 +599,35 @@ default.
       (`dueDay ?? Number(params.dueDay)`), since `RecurringExpenseInput.dueDay`
       is required server-side and there's no "leave unchanged" option to
       send instead. 410 tests total across 43 suites.
+- [x] Three more Recurring Expense fixes, from a second round of direct
+      user feedback. **Icon tap now toggles both directions** —
+      previously only wired unpaid->paid; tapping an already-Paid row's
+      icon now unmarks it too (`useUnmarkRecurringPaid`, same hook the
+      swipe-to-edit drawer's pill uses, so the `['recurringExpenses']`
+      invalidation isn't duplicated), deleting every linked transaction.
+      **Amount no longer hides when entering day-entry mode** — previously
+      toggling the keypad's calendar key swapped the whole calculator
+      display over to the due-day value, which the user found jarring
+      ("shrinks the calculator"); the amount (`€` + value) is now always
+      visible, and a new due-date row sits below it, always visible too --
+      `dateMode` only decides which one the keypad's digits/backspace
+      currently affect. **Due day is now a real month-aware date, not a
+      bare 1-31 number** — reversed the earlier "no calendar context"
+      design: the day (01-31, gray/`colors.text.placeholder`) is now
+      validated against the actual day count of the current budget month
+      and shown alongside that month's fixed "Mon YYYY" label
+      (black/`colors.text.primary`, e.g. "10 Sep 2026"), reusing
+      `dateInput.ts`'s existing month-aware day-entry helpers
+      (`appendDayDigit`/`backspaceDay`/`formatTypedDay`/
+      `isCompleteDayDigits`/`formatMonthYearLabel` — the exact ones
+      `add-transaction.tsx` already uses for its date) instead of the
+      month-agnostic `dueDayInput.ts` written for the first round of this
+      feedback, which is deleted now that nothing uses it — this is
+      purely a display/typing constraint (can't type day 31 in a
+      30-day month) since `RecurringExpense.dueDay` itself is still
+      just a bare Int with no stored month/year. Both Add and Edit now
+      fetch `useCurrentMonth()` (Edit didn't before) to get that context.
+      398 tests total across 42 suites.
 
 **Scaffold caveats worth knowing before the next `npm install` in this
 repo** (SDK 57 is very new — pin these deliberately, don't let npm grab

@@ -13,7 +13,10 @@ import {
   useRecurringExpenses,
   useTransactions,
 } from '../../../src/api/budgetHomeQueries';
-import { useMarkRecurringPaid } from '../../../src/api/recurringExpenseMutations';
+import {
+  useMarkRecurringPaid,
+  useUnmarkRecurringPaid,
+} from '../../../src/api/recurringExpenseMutations';
 import { useAuth } from '../../../src/auth/AuthContext';
 import { ThemeProvider } from '../../../src/theme/ThemeProvider';
 import { router } from 'expo-router';
@@ -63,9 +66,11 @@ const mockedUseRecurringExpenses = useRecurringExpenses as jest.Mock;
 const mockedUseTransactions = useTransactions as jest.Mock;
 const mockedUseBankBalance = useBankBalance as jest.Mock;
 const mockedUseMarkRecurringPaid = useMarkRecurringPaid as jest.Mock;
+const mockedUseUnmarkRecurringPaid = useUnmarkRecurringPaid as jest.Mock;
 const mockedUseAuth = useAuth as jest.Mock;
 const mockSignOut = jest.fn();
 const markRecurringPaidMutateAsync = jest.fn();
+const unmarkRecurringPaidMutateAsync = jest.fn();
 
 const idle = { data: undefined, isLoading: false, isError: false, refetch: jest.fn() };
 
@@ -244,6 +249,11 @@ beforeEach(() => {
     mutateAsync: markRecurringPaidMutateAsync,
     isPending: false,
   });
+  unmarkRecurringPaidMutateAsync.mockResolvedValue(undefined);
+  mockedUseUnmarkRecurringPaid.mockReturnValue({
+    mutateAsync: unmarkRecurringPaidMutateAsync,
+    isPending: false,
+  });
 });
 
 describe('HomeScreen', () => {
@@ -404,12 +414,14 @@ describe('HomeScreen', () => {
     });
   });
 
-  it('does not wire an icon tap handler on an already-Paid Recurrent row', async () => {
+  it('tapping the icon on a Paid Recurrent row unmarks it, deleting every linked transaction', async () => {
     await renderHomeScreen();
 
     await fireEvent.press(screen.getByText('Recurrent'));
+    await fireEvent.press(screen.getByTestId('pay-icon-re-internet'));
 
-    expect(screen.queryByTestId('pay-icon-re-internet')).toBeNull();
+    expect(unmarkRecurringPaidMutateAsync).toHaveBeenCalledWith(['t-internet-1']);
+    expect(markRecurringPaidMutateAsync).not.toHaveBeenCalled();
   });
 
   it('shows a toast and does not crash when marking paid from the icon fails', async () => {
@@ -418,6 +430,16 @@ describe('HomeScreen', () => {
     await renderHomeScreen();
     await fireEvent.press(screen.getByText('Recurrent'));
     await fireEvent.press(screen.getByTestId('pay-icon-re-water'));
+
+    expect(await screen.findByText('Something went wrong. Please try again.')).toBeTruthy();
+  });
+
+  it('shows a toast and does not crash when unmarking paid from the icon fails', async () => {
+    unmarkRecurringPaidMutateAsync.mockRejectedValue(new Error('network error'));
+
+    await renderHomeScreen();
+    await fireEvent.press(screen.getByText('Recurrent'));
+    await fireEvent.press(screen.getByTestId('pay-icon-re-internet'));
 
     expect(await screen.findByText('Something went wrong. Please try again.')).toBeTruthy();
   });

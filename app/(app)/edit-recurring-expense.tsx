@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useCurrentMonth } from '../../src/api/budgetHomeQueries';
 import { useCategories } from '../../src/api/categoryQueries';
 import {
   useMarkRecurringPaid,
@@ -34,22 +35,23 @@ import {
   centsToAmountText,
 } from '../../src/lib/amountInput';
 import {
-  appendDueDayDigit,
-  backspaceDueDay,
-  formatTypedDueDay,
-  isValidDueDay,
-} from '../../src/lib/dueDayInput';
+  appendDayDigit,
+  backspaceDay,
+  formatMonthYearLabel,
+  formatTypedDay,
+  isCompleteDayDigits,
+} from '../../src/lib/dateInput';
 import { budgetTypeForCategory } from '../../src/lib/recurringBudgetType';
 import { todayIsoDate } from '../../src/lib/today';
 import { useTheme } from '../../src/theme/ThemeProvider';
 
-const DUE_DAY_PLACEHOLDER = 'Due date day';
+const DUE_DAY_UNSET_PLACEHOLDER = '--';
 const TOAST_DURATION_MS = 2500;
 const GENERIC_ERROR_MESSAGE = 'Something went wrong. Please try again.';
 
 // Reached only by swiping a Recurrent row (same SwipeableRow pattern as Available/Expenses --
-// tapping a row's icon marks it paid directly from Home, see index.tsx, and tapping the rest
-// of the row does nothing). Combines the mockup's keypad screen (Paid/Unpaid pill, amount,
+// tapping a row's icon toggles paid state directly from Home, see index.tsx, and tapping the
+// rest of the row does nothing). Combines the mockup's keypad screen (Paid/Unpaid pill, amount,
 // Delete) with editing name/category/due-day -- the mockup doesn't show fields for those, but
 // the user asked to be able to change them without deleting and re-adding the bill.
 // Need/Want is deliberately not editable here (or on Add): it's derived from the chosen
@@ -70,6 +72,8 @@ export default function EditRecurringExpenseScreen() {
     transactionIds: string;
   }>();
 
+  const currentMonthQuery = useCurrentMonth();
+  const month = currentMonthQuery.data?.month;
   const categoriesQuery = useCategories();
   const updateRecurringExpense = useUpdateRecurringExpense();
   const markRecurringPaid = useMarkRecurringPaid();
@@ -93,9 +97,11 @@ export default function EditRecurringExpenseScreen() {
   // Same "first touch replaces/clears the pre-filled value outright" pattern as the amount
   // field below (hasEditedAmount) -- dueDayDigits starts pre-filled from params, and the first
   // digit or backspace press in day-entry mode either replaces it wholesale or clears it to
-  // blank; after that, digits/backspace behave normally on the live value. This is also why a
-  // save with the field left blank has to fall back to the original due day rather than being
-  // blocked -- see handleConfirm.
+  // blank; after that, digits/backspace behave normally on the live value (validated against
+  // the real day count of the current budget month via appendDayDigit, from dateInput.ts -- the
+  // same helpers add-transaction.tsx uses for its date). This is also why a save with the field
+  // left blank has to fall back to the original due day rather than being blocked -- see
+  // handleConfirm.
   const [dueDayDigits, setDueDayDigits] = useState(params.dueDay);
   const [hasEditedDueDay, setHasEditedDueDay] = useState(false);
   const [amountText, setAmountText] = useState(() => centsToAmountText(Number(params.amountCents)));
@@ -105,7 +111,10 @@ export default function EditRecurringExpenseScreen() {
   const [hasEditedAmount, setHasEditedAmount] = useState(false);
   const [paid, setPaid] = useState(params.paidThisMonth === 'true');
   // Whether the shared keypad is in day-entry mode (its calendar-toggle key) instead of
-  // amount-entry -- same mechanism add-transaction.tsx uses for its date.
+  // amount-entry -- same mechanism add-transaction.tsx uses for its date. Unlike
+  // add-transaction.tsx, the amount display never hides/swaps for the due-date row -- both stay
+  // visible at all times, dateMode only decides which one the keypad's digits/backspace
+  // currently affect.
   const [dateMode, setDateMode] = useState(false);
   const [overlay, setOverlay] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
@@ -126,7 +135,7 @@ export default function EditRecurringExpenseScreen() {
     return () => clearTimeout(timer);
   }, [toastMessage]);
 
-  const dueDay = isValidDueDay(dueDayDigits) ? Number(dueDayDigits) : null;
+  const dueDay = isCompleteDayDigits(dueDayDigits) ? Number(dueDayDigits) : null;
   const isMutating =
     updateRecurringExpense.isPending ||
     markRecurringPaid.isPending ||
@@ -144,7 +153,7 @@ export default function EditRecurringExpenseScreen() {
         setDueDayDigits(digit);
         return;
       }
-      setDueDayDigits((digits) => appendDueDayDigit(digits, digit));
+      if (month) setDueDayDigits((digits) => appendDayDigit(digits, digit, month));
       return;
     }
     if (!hasEditedAmount) {
@@ -172,7 +181,7 @@ export default function EditRecurringExpenseScreen() {
         setDueDayDigits('');
         return;
       }
-      setDueDayDigits((digits) => backspaceDueDay(digits));
+      setDueDayDigits((digits) => backspaceDay(digits));
       return;
     }
     if (!hasEditedAmount) {
@@ -249,7 +258,7 @@ export default function EditRecurringExpenseScreen() {
     }
   }
 
-  if (categoriesQuery.isLoading) {
+  if (categoriesQuery.isLoading || currentMonthQuery.isLoading) {
     return (
       <View style={[styles.container, { backgroundColor: colors.background.screen }]}>
         <View style={styles.grabberRow}>
@@ -312,36 +321,22 @@ export default function EditRecurringExpenseScreen() {
           />
         </View>
 
-        {dateMode ? (
-          <Text
-            style={[
-              typography.scale.listSubtitle,
-              styles.amountLabel,
-              { color: colors.text.secondary },
-            ]}
-          >
-            Due day
-          </Text>
-        ) : null}
         <Text style={styles.amountRow}>
-          {dateMode ? null : (
-            <Text style={[styles.currencyPrefix, { color: colors.text.secondary }]}>€</Text>
-          )}
+          <Text style={[styles.currencyPrefix, { color: colors.text.secondary }]}>€</Text>
           <Text
             testID="calculator-value"
-            style={[
-              typography.scale.calculatorAmount,
-              {
-                color:
-                  dateMode && dueDayDigits === '' ? colors.text.placeholder : colors.text.primary,
-              },
-            ]}
+            style={[typography.scale.calculatorAmount, { color: colors.text.primary }]}
           >
-            {dateMode
-              ? dueDayDigits === ''
-                ? DUE_DAY_PLACEHOLDER
-                : formatTypedDueDay(dueDayDigits)
-              : amountText || '0'}
+            {amountText || '0'}
+          </Text>
+        </Text>
+
+        <Text style={styles.dueDateRow}>
+          <Text testID="due-day-value" style={[styles.dueDateText, { color: colors.text.placeholder }]}>
+            {dueDayDigits === '' ? DUE_DAY_UNSET_PLACEHOLDER : formatTypedDay(dueDayDigits)}
+          </Text>
+          <Text testID="due-month-year-value" style={[styles.dueDateText, { color: colors.text.primary }]}>
+            {month ? ` ${formatMonthYearLabel(month)}` : ''}
           </Text>
         </Text>
 
@@ -464,16 +459,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     fontSize: 16,
   },
-  amountLabel: {
+  amountRow: {
     textAlign: 'center',
     marginTop: 4,
   },
-  amountRow: {
+  currencyPrefix: {
+    fontSize: 26,
+    fontFamily: 'Fredoka_400Regular',
+  },
+  dueDateRow: {
     textAlign: 'center',
     marginBottom: 8,
   },
-  currencyPrefix: {
-    fontSize: 26,
+  dueDateText: {
+    fontSize: 16,
     fontFamily: 'Fredoka_400Regular',
   },
   keypadWrap: {
