@@ -208,6 +208,29 @@ const transactions = [
     merchant: 'Continente',
     note: null,
     direction: 'EXPENSE',
+    recurringExpense: null,
+    categoryMonth: {
+      id: 'cm-shopping',
+      monthlyBudgetCents: 70000,
+      actualAmountCents: 19420,
+      category: {
+        id: 'c-shopping',
+        name: 'Shopping',
+        icon: 'cart',
+        color: '#4C6EF5',
+        budgetType: 'NEED',
+        direction: 'EXPENSE',
+      },
+    },
+  },
+  {
+    id: 't-rent',
+    amountCents: 90000,
+    date: '2026-09-01',
+    merchant: null,
+    note: null,
+    direction: 'EXPENSE',
+    recurringExpense: { name: 'Rent' },
     categoryMonth: {
       id: 'cm-shopping',
       monthlyBudgetCents: 70000,
@@ -382,6 +405,18 @@ describe('HomeScreen', () => {
 
     expect(screen.getByText('Continente')).toBeTruthy();
     expect(screen.queryByText('New Category')).toBeNull();
+  });
+
+  it('shows the recurring expense\'s own name, not the category name, for a transaction created by marking it paid', async () => {
+    // t-rent has merchant: null (markRecurringPaid never sets merchant/note) and is linked via
+    // recurringExpense: { name: 'Rent' } -- the row must show "Rent", not the "Shopping" category
+    // it happens to be filed under.
+    await renderHomeScreen();
+
+    await fireEvent.press(screen.getByText('Expenses'));
+
+    expect(screen.getByText('Rent')).toBeTruthy();
+    expect(screen.queryByText('Shopping')).toBeNull();
   });
 
   it('navigates to Edit Transaction, with the right params, when an Expenses row is swipe-edited', async () => {
