@@ -12,11 +12,13 @@ import {
   useUpdateCategory,
   useUpdateCategoryMonthBudget,
 } from '../../../src/api/categoryMutations';
+import { useDeleteTransaction } from '../../../src/api/transactionMutations';
 import { ThemeProvider } from '../../../src/theme/ThemeProvider';
 import { router, useLocalSearchParams } from 'expo-router';
 import EditCategoryScreen from '../../../app/(app)/edit-category';
 
 jest.mock('../../../src/api/categoryMutations');
+jest.mock('../../../src/api/transactionMutations');
 jest.mock('expo-router', () => ({
   router: { back: jest.fn(), push: jest.fn() },
   useLocalSearchParams: jest.fn(),
@@ -37,11 +39,13 @@ const mockedUseLocalSearchParams = useLocalSearchParams as jest.Mock;
 const mockedUseUpdateCategoryMonthBudget = useUpdateCategoryMonthBudget as jest.Mock;
 const mockedUseUpdateCategory = useUpdateCategory as jest.Mock;
 const mockedUseRemoveCategoryFromMonth = useRemoveCategoryFromMonth as jest.Mock;
+const mockedUseDeleteTransaction = useDeleteTransaction as jest.Mock;
 const mockedRouterBack = router.back as jest.Mock;
 
 const updateBudgetMutateAsync = jest.fn();
 const updateCategoryMutateAsync = jest.fn();
 const removeFromMonthMutateAsync = jest.fn();
+const deleteTransactionMutateAsync = jest.fn();
 
 function renderScreen() {
   return render(
@@ -78,6 +82,11 @@ beforeEach(() => {
   });
   mockedUseRemoveCategoryFromMonth.mockReturnValue({
     mutateAsync: removeFromMonthMutateAsync,
+    isPending: false,
+  });
+  deleteTransactionMutateAsync.mockResolvedValue(undefined);
+  mockedUseDeleteTransaction.mockReturnValue({
+    mutateAsync: deleteTransactionMutateAsync,
     isPending: false,
   });
 });
@@ -198,6 +207,93 @@ describe('EditCategoryScreen', () => {
 
     expect(removeFromMonthMutateAsync).toHaveBeenCalledWith({ categoryMonthId: 'cm-1' });
     expect(mockedRouterBack).toHaveBeenCalled();
+  });
+
+  describe('deleting an income category with a received transaction', () => {
+    const incomeParams = {
+      categoryMonthId: 'cm-salary',
+      categoryId: 'c-salary',
+      name: 'Salary',
+      icon: 'briefcase',
+      color: '#B8D8F0',
+      budgetType: '',
+      direction: 'INCOME',
+      monthlyBudgetCents: '450000',
+      recurringCommittedCents: '0',
+      transactionIds: '["t-1","t-2"]',
+    };
+
+    it('deletes every linked transaction first, then the category, instead of being blocked', async () => {
+      mockedUseLocalSearchParams.mockReturnValue(incomeParams);
+      mockedAlert.mockImplementation((_title, _message, buttons) => {
+        const deleteButton = buttons?.find((button) => button.text === 'Delete');
+        deleteButton?.onPress?.();
+      });
+      await renderScreen();
+
+      await fireEvent.press(screen.getByTestId('delete-category-button'));
+
+      expect(deleteTransactionMutateAsync).toHaveBeenCalledWith({ transactionId: 't-1' });
+      expect(deleteTransactionMutateAsync).toHaveBeenCalledWith({ transactionId: 't-2' });
+      expect(removeFromMonthMutateAsync).toHaveBeenCalledWith({ categoryMonthId: 'cm-salary' });
+      expect(mockedRouterBack).toHaveBeenCalled();
+    });
+
+    it('shows a toast and does not attempt to delete the category if a transaction fails to delete', async () => {
+      deleteTransactionMutateAsync.mockRejectedValue(new Error('network error'));
+      mockedUseLocalSearchParams.mockReturnValue(incomeParams);
+      mockedAlert.mockImplementation((_title, _message, buttons) => {
+        const deleteButton = buttons?.find((button) => button.text === 'Delete');
+        deleteButton?.onPress?.();
+      });
+      await renderScreen();
+
+      await fireEvent.press(screen.getByTestId('delete-category-button'));
+
+      expect(await screen.findByText('Something went wrong. Please try again.')).toBeTruthy();
+      expect(removeFromMonthMutateAsync).not.toHaveBeenCalled();
+      expect(mockedRouterBack).not.toHaveBeenCalled();
+    });
+
+    it('does not attempt any transaction deletion for an income category with no transactions', async () => {
+      mockedUseLocalSearchParams.mockReturnValue({ ...incomeParams, transactionIds: '[]' });
+      mockedAlert.mockImplementation((_title, _message, buttons) => {
+        const deleteButton = buttons?.find((button) => button.text === 'Delete');
+        deleteButton?.onPress?.();
+      });
+      await renderScreen();
+
+      await fireEvent.press(screen.getByTestId('delete-category-button'));
+
+      expect(deleteTransactionMutateAsync).not.toHaveBeenCalled();
+      expect(removeFromMonthMutateAsync).toHaveBeenCalledWith({ categoryMonthId: 'cm-salary' });
+      expect(mockedRouterBack).toHaveBeenCalled();
+    });
+
+    it('does not delete transactions for an expense category even if transactionIds were somehow present', async () => {
+      mockedUseLocalSearchParams.mockReturnValue({
+        categoryMonthId: 'cm-1',
+        categoryId: 'c-1',
+        name: 'Shopping',
+        icon: 'cart',
+        color: '#4C6EF5',
+        budgetType: 'NEED',
+        direction: 'EXPENSE',
+        monthlyBudgetCents: '70000',
+        recurringCommittedCents: '0',
+        transactionIds: '["t-1"]',
+      });
+      mockedAlert.mockImplementation((_title, _message, buttons) => {
+        const deleteButton = buttons?.find((button) => button.text === 'Delete');
+        deleteButton?.onPress?.();
+      });
+      await renderScreen();
+
+      await fireEvent.press(screen.getByTestId('delete-category-button'));
+
+      expect(deleteTransactionMutateAsync).not.toHaveBeenCalled();
+      expect(removeFromMonthMutateAsync).toHaveBeenCalledWith({ categoryMonthId: 'cm-1' });
+    });
   });
 
   it('shows a specific toast when deletion is blocked by existing transactions', async () => {

@@ -221,7 +221,12 @@ export default function HomeScreen() {
 
   function renderRows() {
     if (tab === 'AVAILABLE') {
-      return (expenseCategoryMonths.data ?? []).map((cm) => (
+      // Sorted alphabetically by category name -- the query itself returns whatever order the
+      // backend happens to return them in, not a meaningful one for a user to scan.
+      const sortedCategoryMonths = [...(expenseCategoryMonths.data ?? [])].sort((a, b) =>
+        a.category.name.localeCompare(b.category.name),
+      );
+      return sortedCategoryMonths.map((cm) => (
         <SwipeableRow
           key={`${cm.id}-${listResetKey}`}
           testID={`swipe-edit-action-${cm.id}`}
@@ -348,6 +353,10 @@ export default function HomeScreen() {
                 direction: cm.category.direction,
                 monthlyBudgetCents: String(cm.monthlyBudgetCents),
                 recurringCommittedCents: String(cm.recurringCommittedCents),
+                // Only meaningful for Income (see edit-category.tsx's delete handling) -- an
+                // income category's transactions are only ever its own "received" entries, so
+                // deleting the category can take them with it instead of blocking the user.
+                transactionIds: JSON.stringify(cm.transactions.map((t) => t.id)),
               },
             })
           }

@@ -295,6 +295,18 @@ describe('HomeScreen', () => {
     expect(screen.getAllByText('Budget')).toHaveLength(2);
   });
 
+  it('sorts the Available tab\'s categories alphabetically by name, regardless of query order', async () => {
+    // Fixture order is Shopping then Eating Out -- alphabetical order flips that, so this
+    // actually catches a regression rather than passing by coincidence.
+    await renderHomeScreen();
+
+    const rows = screen.getAllByTestId(/^swipe-edit-action-cm-(shopping|eating-out)$/);
+    expect(rows.map((row) => row.props.testID)).toEqual([
+      'swipe-edit-action-cm-eating-out',
+      'swipe-edit-action-cm-shopping',
+    ]);
+  });
+
   it("shows each category's amount spent so far as the headline figure, with its total budget in gray underneath", async () => {
     await renderHomeScreen();
 
@@ -534,6 +546,7 @@ describe('HomeScreen', () => {
         direction: 'INCOME',
         monthlyBudgetCents: '430000',
         recurringCommittedCents: '0',
+        transactionIds: '["t-obconnect-1"]',
       },
     });
   });

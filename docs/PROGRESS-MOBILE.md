@@ -823,6 +823,32 @@ default.
       is above 0. 421 tests total across 42 suites (6 new for this
       screen, 2 existing `index.test.tsx` navigation-param assertions
       updated for the new param).
+- [x] Two unrelated small fixes from the running app. **Deleting an Income
+      category with a received transaction was blocked** the same way an
+      Expense category with real transactions is (`CATEGORY_MONTH_HAS_TRANSACTIONS`)
+      -- explicit user call that this is wrong for Income specifically: an
+      income category's transactions are only ever the "received" entries
+      its own row creates (see `index.tsx`'s `handleToggleIncomeReceived`),
+      not independent spending history worth protecting, so there's no
+      reason to force the user to unmark it received first. `index.tsx`'s
+      two `/edit-category` navigations now also pass a `transactionIds`
+      param (JSON array, mirroring `edit-recurring-expense.tsx`'s own
+      pattern); `edit-category.tsx`'s delete handler, when `isIncome` and
+      that list isn't empty, deletes every one of them first (allSettled,
+      so a partial failure surfaces as an error instead of silently
+      leaving some deleted) and only then calls `removeCategoryFromMonth`
+      -- Expense categories are untouched, still blocked+toasted exactly
+      as before. **Available tab wasn't sorted** -- rows rendered in
+      whatever order `categoryMonths` happened to return, not a
+      meaningful order for a user to scan. Sorted alphabetically by
+      category name client-side (`[...data].sort((a, b) =>
+      a.category.name.localeCompare(b.category.name))`), same convention
+      `ExistingCategoryPicker.tsx` already established. Income tab is
+      unaffected (not asked for, scoped to "the available menu" per the
+      user's own wording). 426 tests total across 42 suites (4 new for
+      the income-delete-cascade, 1 new for the sort, regression-shaped
+      since the fixture's insertion order and alphabetical order
+      deliberately differ).
 
 **Scaffold caveats worth knowing before the next `npm install` in this
 repo** (SDK 57 is very new — pin these deliberately, don't let npm grab

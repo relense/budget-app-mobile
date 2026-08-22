@@ -10,6 +10,7 @@ import {
   useUpdateCategoryMonthBudget,
 } from '../../src/api/categoryMutations';
 import { hasGraphqlErrorCode } from '../../src/api/graphqlClient';
+import { useDeleteTransaction } from '../../src/api/transactionMutations';
 import type { BudgetType, Direction } from '../../src/api/types';
 import { AmountKeypad } from '../../src/components/AmountKeypad';
 import { CategoryIcon } from '../../src/components/CategoryIcon';
@@ -54,12 +55,17 @@ export default function EditCategoryScreen() {
     direction: string;
     monthlyBudgetCents: string;
     recurringCommittedCents: string;
+    transactionIds: string;
   }>();
   const updateBudget = useUpdateCategoryMonthBudget();
   const updateCategory = useUpdateCategory();
   const removeFromMonth = useRemoveCategoryFromMonth();
+  const deleteTransaction = useDeleteTransaction();
 
   const isIncome = params.direction === 'INCOME';
+  const transactionIds: string[] = params.transactionIds
+    ? JSON.parse(params.transactionIds)
+    : [];
 
   const [name, setName] = useState(params.name);
   const [icon, setIcon] = useState(params.icon);
@@ -180,6 +186,23 @@ export default function EditCategoryScreen() {
 
   async function handleDeleteConfirmed() {
     try {
+      // An income category's transactions are only ever the "received" entries this same
+      // category-month's own toggle creates (see index.tsx's handleToggleIncomeReceived) --
+      // unlike an expense category, there's no independent spending history to protect here, so
+      // deleting the category can safely take them with it instead of blocking the user and
+      // making them unmark it received first. allSettled (not all) so a partial failure still
+      // surfaces as an error instead of silently leaving some deleted and the category not.
+      if (isIncome && transactionIds.length > 0) {
+        const results = await Promise.allSettled(
+          transactionIds.map((transactionId) =>
+            deleteTransaction.mutateAsync({ transactionId }),
+          ),
+        );
+        if (results.some((result) => result.status === 'rejected')) {
+          setToastMessage(GENERIC_ERROR_MESSAGE);
+          return;
+        }
+      }
       await removeFromMonth.mutateAsync({ categoryMonthId: params.categoryMonthId });
       router.back();
     } catch (err) {
