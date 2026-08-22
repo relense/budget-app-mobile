@@ -15,6 +15,7 @@ import { useAuth } from '../../src/auth/AuthContext';
 import { AddRow } from '../../src/components/AddRow';
 import { CategoryIcon } from '../../src/components/CategoryIcon';
 import { ListRow } from '../../src/components/ListRow';
+import { RetryableError } from '../../src/components/RetryableError';
 import { SwipeableRow } from '../../src/components/SwipeableRow';
 import {
   mostRecentDate,
@@ -53,6 +54,16 @@ const HEADER_METRIC_ORDER: HeaderMetric[] = [
   'TOTAL_INCOME',
   'TOTAL_BALANCE',
 ];
+
+// One distinct string per failing query, not a single shared message -- so the message on
+// screen tells you which fetch actually failed instead of just "something went wrong".
+const MONTH_LOAD_ERROR = "Couldn't load your budget for this month.";
+const TAB_LOAD_ERRORS: Record<Tab, string> = {
+  AVAILABLE: "Couldn't load your budget categories.",
+  EXPENSES: "Couldn't load your transactions.",
+  RECURRENT: "Couldn't load your recurring expenses.",
+  INCOME: "Couldn't load your income.",
+};
 
 // Bottom nav is drawn for visual completeness (matches the mockups) but isn't real navigation
 // yet -- only this screen was in scope for this pass, see docs/PROGRESS-MOBILE.md.
@@ -235,44 +246,16 @@ export default function HomeScreen() {
     });
   }
 
-  // Every tab body query is gated on `month` being known (`enabled: !!month` in
-  // budgetHomeQueries.ts), so a disabled-and-never-fetched query reports isLoading: false /
-  // isError: false (react-query v5 semantics) -- without this explicit check, a slow or failed
-  // currentMonth fetch left the whole dashboard silently showing an empty state forever, with
-  // no spinner and no error message.
-  if (currentMonthQuery.isLoading) {
-    return (
-      <View
-        testID="home-loading"
-        style={[styles.container, styles.centered, { backgroundColor: colors.background.screen }]}
-      >
-        <ActivityIndicator color={colors.text.primary} />
-      </View>
-    );
-  }
-  if (currentMonthQuery.isError) {
-    return (
-      <View
-        testID="home-error"
-        style={[styles.container, styles.centered, { backgroundColor: colors.background.screen }]}
-      >
-        <Text style={[styles.errorText, { color: colors.button.deleteBackground }]}>
-          Something went wrong loading this. Please try again.
-        </Text>
-      </View>
-    );
-  }
-
   return (
     <View style={[styles.container, { backgroundColor: colors.background.screen }]}>
       <View style={{ paddingTop: insets.top + 16 }}>
-        {headerQuery.isLoading ? (
+        {currentMonthQuery.isLoading || headerQuery.isLoading ? (
           <ActivityIndicator
             testID="header-amount-spinner"
             style={styles.headerSpinner}
             color={colors.text.primary}
           />
-        ) : headerQuery.isError ? (
+        ) : currentMonthQuery.isError || headerQuery.isError ? (
           <Text
             testID="header-amount-error"
             style={[styles.headerAmount, { color: colors.button.deleteBackground }]}
@@ -361,12 +344,31 @@ export default function HomeScreen() {
         {tab === 'RECURRENT' ? <AddRow label="New recurrent expense" /> : null}
         {tab === 'INCOME' ? <AddRow label="New income" /> : null}
 
-        {activeQuery.isLoading ? (
-          <ActivityIndicator style={styles.spinner} color={colors.text.primary} />
+        {/* Every tab body query is gated on `month` being known (`enabled: !!month` in
+            budgetHomeQueries.ts), so while currentMonth is loading or failed, activeQuery is
+            just idle (isLoading: false, isError: false, react-query v5 semantics) -- checked
+            explicitly here first, otherwise a slow/failed currentMonth fetch would show an
+            empty list with no spinner and no error. */}
+        {currentMonthQuery.isLoading || activeQuery.isLoading ? (
+          <ActivityIndicator
+            testID="home-body-spinner"
+            style={styles.spinner}
+            color={colors.text.primary}
+          />
+        ) : currentMonthQuery.isError ? (
+          <RetryableError
+            testID="home-body-error"
+            style={styles.spinner}
+            message={MONTH_LOAD_ERROR}
+            onRetry={() => currentMonthQuery.refetch()}
+          />
         ) : activeQuery.isError ? (
-          <Text style={[styles.errorText, { color: colors.button.deleteBackground }]}>
-            Something went wrong loading this. Please try again.
-          </Text>
+          <RetryableError
+            testID="home-body-error"
+            style={styles.spinner}
+            message={TAB_LOAD_ERRORS[tab]}
+            onRetry={() => activeQuery.refetch()}
+          />
         ) : (
           renderRows()
         )}
@@ -410,10 +412,6 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  centered: {
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   headerAmount: {
     fontSize: 32,
@@ -479,11 +477,6 @@ const styles = StyleSheet.create({
   },
   spinner: {
     marginTop: 24,
-  },
-  errorText: {
-    textAlign: 'center',
-    marginTop: 24,
-    fontSize: 14,
   },
   bottomNav: {
     flexDirection: 'row',

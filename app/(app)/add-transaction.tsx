@@ -18,6 +18,7 @@ import { useCreateTransaction } from '../../src/api/transactionMutations';
 import { AmountKeypad } from '../../src/components/AmountKeypad';
 import { CategoryIcon } from '../../src/components/CategoryIcon';
 import { ExistingCategoryPicker } from '../../src/components/ExistingCategoryPicker';
+import { RetryableError } from '../../src/components/RetryableError';
 import {
   amountTextToCents,
   appendDecimalPoint,
@@ -36,6 +37,8 @@ import { todayIsoDate } from '../../src/lib/today';
 import { useTheme } from '../../src/theme/ThemeProvider';
 
 type Overlay = 'none' | 'categoryList';
+
+const CATALOG_LOAD_ERROR = "Couldn't load your budget categories for this transaction.";
 
 export default function AddTransactionScreen() {
   const { colors, typography } = useTheme();
@@ -157,13 +160,21 @@ export default function AddTransactionScreen() {
 
   if (isCatalogError) {
     return (
-      <View
-        testID="add-transaction-error"
-        style={[styles.container, styles.centered, { backgroundColor: colors.background.screen }]}
-      >
-        <Text style={[styles.errorText, { color: colors.button.deleteBackground }]}>
-          Something went wrong loading this. Please try again.
-        </Text>
+      <View style={[styles.container, { backgroundColor: colors.background.screen }]}>
+        <View style={styles.grabberRow}>
+          <View style={[styles.grabber, { backgroundColor: colors.segment.track }]} />
+        </View>
+        <View testID="add-transaction-error" style={[styles.centered, { flex: 1 }]}>
+          <RetryableError
+            message={CATALOG_LOAD_ERROR}
+            onRetry={() => {
+              currentMonthQuery.refetch();
+              // expenseCategoryMonths is gated on `month` being known (enabled: !!month) -- only
+              // worth refetching once there's a month to scope it to.
+              if (month) expenseCategoryMonths.refetch();
+            }}
+          />
+        </View>
       </View>
     );
   }

@@ -24,6 +24,7 @@ import { AmountKeypad } from '../../src/components/AmountKeypad';
 import { CategoryIcon } from '../../src/components/CategoryIcon';
 import { ExistingCategoryPicker } from '../../src/components/ExistingCategoryPicker';
 import { IconPicker } from '../../src/components/IconPicker';
+import { RetryableError } from '../../src/components/RetryableError';
 import { Toast } from '../../src/components/Toast';
 import {
   amountTextToCents,
@@ -48,6 +49,7 @@ type CategoryMode = 'undecided' | 'new' | 'existing';
 type Overlay = 'none' | 'icons' | 'existingList';
 
 const TOAST_DURATION_MS = 2500;
+const CATALOG_LOAD_ERROR = "Couldn't load your category catalog.";
 
 export default function AddCategoryScreen() {
   const { colors, typography } = useTheme();
@@ -172,13 +174,22 @@ export default function AddCategoryScreen() {
 
   if (isCatalogError) {
     return (
-      <View
-        testID="add-category-error"
-        style={[styles.container, styles.centered, { backgroundColor: colors.background.screen }]}
-      >
-        <Text style={[styles.errorText, { color: colors.button.deleteBackground }]}>
-          Something went wrong loading this. Please try again.
-        </Text>
+      <View style={[styles.container, { backgroundColor: colors.background.screen }]}>
+        <View style={styles.grabberRow}>
+          <View style={[styles.grabber, { backgroundColor: colors.segment.track }]} />
+        </View>
+        <View testID="add-category-error" style={[styles.centered, { flex: 1 }]}>
+          <RetryableError
+            message={CATALOG_LOAD_ERROR}
+            onRetry={() => {
+              currentMonthQuery.refetch();
+              categoriesQuery.refetch();
+              // expenseCategoryMonths is gated on `month` being known (enabled: !!month) -- only
+              // worth refetching once there's a month to scope it to.
+              if (month) expenseCategoryMonths.refetch();
+            }}
+          />
+        </View>
       </View>
     );
   }

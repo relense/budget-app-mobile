@@ -78,11 +78,13 @@ beforeEach(() => {
     data: { month: '2026-09', locked: false },
     isLoading: false,
     isError: false,
+    refetch: jest.fn(),
   });
   mockedUseCategoryMonths.mockReturnValue({
     data: [shoppingCategoryMonth, eatingOutCategoryMonth],
     isLoading: false,
     isError: false,
+    refetch: jest.fn(),
   });
   createMutateAsync.mockResolvedValue(undefined);
   mockedUseCreateTransaction.mockReturnValue({
@@ -102,20 +104,51 @@ describe('AddTransactionScreen', () => {
     expect(screen.queryByTestId('keypad-confirm')).toBeNull();
   });
 
-  it('shows an error state when the current month fails to load', async () => {
-    mockedUseCurrentMonth.mockReturnValue({ data: undefined, isLoading: false, isError: true });
+  it('shows a specific, retryable error when the current month fails to load', async () => {
+    const refetchMonth = jest.fn();
+    const refetchCategoryMonths = jest.fn();
+    mockedUseCurrentMonth.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      refetch: refetchMonth,
+    });
+    mockedUseCategoryMonths.mockReturnValue({
+      data: [shoppingCategoryMonth, eatingOutCategoryMonth],
+      isLoading: false,
+      isError: false,
+      refetch: refetchCategoryMonths,
+    });
 
     await renderScreen();
 
     expect(screen.getByTestId('add-transaction-error')).toBeTruthy();
+    expect(
+      screen.getByText("Couldn't load your budget categories for this transaction."),
+    ).toBeTruthy();
+
+    await fireEvent.press(screen.getByTestId('retry-button'));
+
+    expect(refetchMonth).toHaveBeenCalledTimes(1);
+    // expenseCategoryMonths is gated on `month` being known -- since the month fetch itself
+    // failed, there's no month to scope a category-months refetch to yet.
+    expect(refetchCategoryMonths).not.toHaveBeenCalled();
   });
 
-  it('shows an error state when the category months fetch fails', async () => {
-    mockedUseCategoryMonths.mockReturnValue({ data: undefined, isLoading: false, isError: true });
+  it('shows a specific, retryable error when the category months fetch fails', async () => {
+    mockedUseCategoryMonths.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      refetch: jest.fn(),
+    });
 
     await renderScreen();
 
     expect(screen.getByTestId('add-transaction-error')).toBeTruthy();
+    expect(
+      screen.getByText("Couldn't load your budget categories for this transaction."),
+    ).toBeTruthy();
   });
 
   it('shows an empty state instead of a broken picker when no expense categories are active this month', async () => {

@@ -19,6 +19,7 @@ import { useDeleteTransaction, useUpdateTransaction } from '../../src/api/transa
 import { AmountKeypad } from '../../src/components/AmountKeypad';
 import { CategoryIcon } from '../../src/components/CategoryIcon';
 import { ExistingCategoryPicker } from '../../src/components/ExistingCategoryPicker';
+import { RetryableError } from '../../src/components/RetryableError';
 import {
   amountTextToCents,
   appendDecimalPoint,
@@ -37,6 +38,7 @@ import {
 import { useTheme } from '../../src/theme/ThemeProvider';
 
 const GENERIC_ERROR_MESSAGE = 'Something went wrong. Please try again.';
+const CATALOG_LOAD_ERROR = "Couldn't load your budget categories to edit this transaction.";
 
 type Overlay = 'none' | 'categoryList';
 
@@ -189,13 +191,21 @@ export default function EditTransactionScreen() {
 
   if (isCatalogError) {
     return (
-      <View
-        testID="edit-transaction-error"
-        style={[styles.container, styles.centered, { backgroundColor: colors.background.screen }]}
-      >
-        <Text style={[styles.errorText, { color: colors.button.deleteBackground }]}>
-          Something went wrong loading this. Please try again.
-        </Text>
+      <View style={[styles.container, { backgroundColor: colors.background.screen }]}>
+        <View style={styles.grabberRow}>
+          <View style={[styles.grabber, { backgroundColor: colors.segment.track }]} />
+        </View>
+        <View testID="edit-transaction-error" style={[styles.centered, { flex: 1 }]}>
+          <RetryableError
+            message={CATALOG_LOAD_ERROR}
+            onRetry={() => {
+              currentMonthQuery.refetch();
+              // expenseCategoryMonths is gated on `month` being known (enabled: !!month) -- only
+              // worth refetching once there's a month to scope it to.
+              if (month) expenseCategoryMonths.refetch();
+            }}
+          />
+        </View>
       </View>
     );
   }

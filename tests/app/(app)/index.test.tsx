@@ -60,7 +60,7 @@ const mockedUseBankBalance = useBankBalance as jest.Mock;
 const mockedUseAuth = useAuth as jest.Mock;
 const mockSignOut = jest.fn();
 
-const idle = { data: undefined, isLoading: false, isError: false };
+const idle = { data: undefined, isLoading: false, isError: false, refetch: jest.fn() };
 
 const expenseCategoryMonths = [
   {
@@ -338,21 +338,49 @@ describe('HomeScreen', () => {
     expect(mockSignOut).toHaveBeenCalled();
   });
 
-  it('shows a full-screen spinner while the current month is loading, not an empty dashboard', async () => {
+  it('shows a spinner in the list area while the current month is loading, keeping the header/tabs/nav visible', async () => {
     mockedUseCurrentMonth.mockReturnValue({ ...idle, isLoading: true });
     await renderHomeScreen();
 
-    expect(screen.getByTestId('home-loading')).toBeTruthy();
-    expect(screen.queryByText('Available Budgeted')).toBeNull();
-    expect(screen.queryByText('New budget category')).toBeNull();
+    expect(screen.getByTestId('home-body-spinner')).toBeTruthy();
+    expect(screen.getByText('Available Budgeted')).toBeTruthy();
+    expect(screen.getByTestId('add-transaction-button')).toBeTruthy();
+    expect(screen.queryByText('Shopping')).toBeNull();
   });
 
-  it('shows a full-screen error when the current month fails to load, not an empty dashboard', async () => {
+  it('shows a specific, retryable error in the list area when the current month fails to load, keeping the rest of the dashboard usable', async () => {
     mockedUseCurrentMonth.mockReturnValue({ ...idle, isError: true });
     await renderHomeScreen();
 
-    expect(screen.getByTestId('home-error')).toBeTruthy();
-    expect(screen.queryByText('Available Budgeted')).toBeNull();
+    expect(screen.getByTestId('home-body-error')).toBeTruthy();
+    expect(screen.getByText("Couldn't load your budget for this month.")).toBeTruthy();
+    // The rest of the shell -- header, tabs, bottom nav -- stays usable instead of the whole
+    // screen being replaced by the error.
+    expect(screen.getByText('Available Budgeted')).toBeTruthy();
+    expect(screen.getByTestId('sign-out-button')).toBeTruthy();
+  });
+
+  it('retries the current-month fetch when Try again is pressed after it fails', async () => {
+    const refetch = jest.fn();
+    mockedUseCurrentMonth.mockReturnValue({ ...idle, isError: true, refetch });
+    await renderHomeScreen();
+
+    await fireEvent.press(screen.getByTestId('retry-button'));
+
+    expect(refetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows a tab-specific, retryable error when a tab body query fails (current month already loaded)', async () => {
+    const refetch = jest.fn();
+    mockedUseTransactions.mockReturnValue({ ...idle, isError: true, refetch });
+    await renderHomeScreen();
+
+    await fireEvent.press(screen.getByText('Expenses'));
+
+    expect(screen.getByText("Couldn't load your transactions.")).toBeTruthy();
+
+    await fireEvent.press(screen.getByTestId('retry-button'));
+    expect(refetch).toHaveBeenCalledTimes(1);
   });
 
   it('shows a spinner in place of the header amount while its backing query is loading', async () => {
