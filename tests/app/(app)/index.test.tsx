@@ -204,17 +204,52 @@ describe('HomeScreen', () => {
   it('shows expense categories on the Available tab, with the "new" row', async () => {
     await renderHomeScreen();
 
-    expect(screen.getByText('New budget category')).toBeTruthy();
+    expect(screen.getByText('New Category')).toBeTruthy();
     expect(screen.getByText('Shopping')).toBeTruthy();
     expect(screen.getByText('Eating Out')).toBeTruthy();
     // The "Available" tab label itself, plus one "Available" subtitle per row (2 categories).
     expect(screen.getAllByText('Available')).toHaveLength(3);
   });
 
-  it('navigates to Add Category when "New budget category" is pressed', async () => {
+  it("shows each category's amount spent so far as the headline figure, with its total budget in gray underneath", async () => {
     await renderHomeScreen();
 
-    await fireEvent.press(screen.getByText('New budget category'));
+    // Shopping: actualAmountCents 19420 spent, monthlyBudgetCents 70000 total.
+    expect(screen.getByText('€194.20')).toBeTruthy();
+    expect(screen.getByText('€700.00')).toBeTruthy();
+    // Eating Out: actualAmountCents 5000 spent, monthlyBudgetCents 20000 total.
+    expect(screen.getByText('€50.00')).toBeTruthy();
+    expect(screen.getByText('€200.00')).toBeTruthy();
+    // The old "available remaining" figure and percent-spent text are both gone from this row.
+    expect(screen.queryByText('€505.80')).toBeNull();
+    expect(screen.queryByText('28%')).toBeNull();
+  });
+
+  it('shows "Overspent" in red instead of "Available" once a category has spent past its budget', async () => {
+    mockedUseCategoryMonths.mockImplementation((_month: string, direction: string) => ({
+      ...idle,
+      data:
+        direction === 'EXPENSE'
+          ? [{ ...expenseCategoryMonths[0], actualAmountCents: 80000 }, expenseCategoryMonths[1]]
+          : incomeCategoryMonths,
+    }));
+    await renderHomeScreen();
+
+    expect(screen.getByText('Overspent')).toBeTruthy();
+    const overspentLabelStyle = ([] as unknown[])
+      .concat(screen.getByText('Overspent').props.style)
+      .filter(Boolean) as Record<string, unknown>[];
+    expect(overspentLabelStyle.some((s) => s.color === '#F2705C')).toBe(true);
+
+    // The category that's still within budget keeps the normal "Available" label.
+    expect(screen.getByText('Eating Out')).toBeTruthy();
+    expect(screen.getAllByText('Available')).toHaveLength(2); // tab label + Eating Out's row
+  });
+
+  it('navigates to Add Category when "New Category" is pressed', async () => {
+    await renderHomeScreen();
+
+    await fireEvent.press(screen.getByText('New Category'));
 
     expect(mockedRouterPush).toHaveBeenCalledWith('/add-category');
   });
@@ -253,7 +288,7 @@ describe('HomeScreen', () => {
     await fireEvent.press(screen.getByText('Expenses'));
 
     expect(screen.getByText('Continente')).toBeTruthy();
-    expect(screen.queryByText('New budget category')).toBeNull();
+    expect(screen.queryByText('New Category')).toBeNull();
   });
 
   it('navigates to Edit Transaction, with the right params, when an Expenses row is swipe-edited', async () => {
@@ -274,16 +309,13 @@ describe('HomeScreen', () => {
     });
   });
 
-  it('shows the category\'s cumulative spend percentage on an Expenses row, not just this one transaction\'s own share', async () => {
-    // Regression test: this transaction is only 968/70000 = 1% of the budget on its own, but
-    // the category (per categoryMonth.actualAmountCents) has spent 19420/70000 = 28% overall --
-    // the row must reflect the latter, so a category that's actually over budget shows over
-    // 100% instead of a misleadingly small single-transaction ratio.
+  it('shows only the transaction\'s own amount on an Expenses row, with no percent-spent text', async () => {
     await renderHomeScreen();
 
     await fireEvent.press(screen.getByText('Expenses'));
 
-    expect(screen.getByText('28%')).toBeTruthy();
+    expect(screen.getByText('€9.68')).toBeTruthy();
+    expect(screen.queryByText('28%')).toBeNull();
     expect(screen.queryByText('1%')).toBeNull();
   });
 
