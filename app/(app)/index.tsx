@@ -209,20 +209,41 @@ export default function HomeScreen() {
       return (recurringExpenses.data ?? []).map((re) => {
         const date = mostRecentDate(re.transactions);
         return (
-          <ListRow
-            key={re.id}
-            icon={
-              re.paidThisMonth ? (
-                <MaterialCommunityIcons name="check" size={20} color={colors.status.paid.text} />
-              ) : (
-                <CategoryIcon name={re.category.icon} color={colors.text.primary} />
-              )
+          <SwipeableRow
+            key={`${re.id}-${listResetKey}`}
+            testID={`swipe-edit-action-${re.id}`}
+            onEdit={() =>
+              router.push({
+                pathname: '/edit-recurring-expense',
+                params: {
+                  recurringExpenseId: re.id,
+                  name: re.name,
+                  amountCents: String(re.amountCents),
+                  categoryId: re.category.id,
+                  categoryIcon: re.category.icon,
+                  categoryColor: re.category.color,
+                  budgetType: re.budgetType,
+                  dueDay: String(re.dueDay),
+                  paidThisMonth: String(re.paidThisMonth),
+                  transactionIds: JSON.stringify(re.transactions.map((t) => t.id)),
+                },
+              })
             }
-            circleColor={re.paidThisMonth ? colors.status.paid.background : re.category.color}
-            title={re.name}
-            subtitle={re.paidThisMonth ? (date ? formatDate(date) : 'Paid') : 'Unpaid'}
-            amountText={formatCents(re.amountCents)}
-          />
+          >
+            <ListRow
+              icon={
+                re.paidThisMonth ? (
+                  <MaterialCommunityIcons name="check" size={20} color={colors.status.paid.text} />
+                ) : (
+                  <CategoryIcon name={re.category.icon} color={colors.text.primary} />
+                )
+              }
+              circleColor={re.paidThisMonth ? colors.status.paid.background : re.category.color}
+              title={re.name}
+              subtitle={re.paidThisMonth ? (date ? formatDate(date) : 'Paid') : 'Unpaid'}
+              amountText={formatCents(re.amountCents)}
+            />
+          </SwipeableRow>
         );
       });
     }
@@ -230,15 +251,52 @@ export default function HomeScreen() {
     return (incomeCategoryMonths.data ?? []).map((cm) => {
       const date = mostRecentDate(cm.transactions);
       return (
-        <ListRow
-          key={cm.id}
-          icon={<CategoryIcon name={cm.category.icon} color={colors.text.primary} />}
-          circleColor={cm.category.color}
-          title={cm.category.name}
-          subtitle={date ? formatDate(date) : undefined}
-          amountText={formatCents(cm.actualAmountCents)}
-          secondaryAmountText={formatCents(cm.monthlyBudgetCents)}
-        />
+        <SwipeableRow
+          key={`${cm.id}-${listResetKey}`}
+          testID={`swipe-edit-action-${cm.id}`}
+          onEdit={() =>
+            router.push({
+              pathname: '/edit-category',
+              params: {
+                categoryMonthId: cm.id,
+                categoryId: cm.category.id,
+                name: cm.category.name,
+                icon: cm.category.icon,
+                color: cm.category.color,
+                budgetType: cm.category.budgetType ?? '',
+                direction: cm.category.direction,
+                monthlyBudgetCents: String(cm.monthlyBudgetCents),
+              },
+            })
+          }
+        >
+          <Pressable
+            testID={`income-row-${cm.id}`}
+            onPress={() =>
+              router.push({
+                pathname: '/income-received',
+                params: {
+                  categoryMonthId: cm.id,
+                  name: cm.category.name,
+                  icon: cm.category.icon,
+                  color: cm.category.color,
+                  monthlyBudgetCents: String(cm.monthlyBudgetCents),
+                  actualAmountCents: String(cm.actualAmountCents),
+                  transactionIds: JSON.stringify(cm.transactions.map((t) => t.id)),
+                },
+              })
+            }
+          >
+            <ListRow
+              icon={<CategoryIcon name={cm.category.icon} color={colors.text.primary} />}
+              circleColor={cm.category.color}
+              title={cm.category.name}
+              subtitle={date ? formatDate(date) : undefined}
+              amountText={formatCents(cm.actualAmountCents)}
+              secondaryAmountText={formatCents(cm.monthlyBudgetCents)}
+            />
+          </Pressable>
+        </SwipeableRow>
       );
     });
   }
@@ -350,8 +408,12 @@ export default function HomeScreen() {
         {tab === 'AVAILABLE' ? (
           <AddRow label="New Category" onPress={() => router.push('/add-category')} />
         ) : null}
-        {tab === 'RECURRENT' ? <AddRow label="New recurrent expense" /> : null}
-        {tab === 'INCOME' ? <AddRow label="New income" /> : null}
+        {tab === 'RECURRENT' ? (
+          <AddRow label="New recurrent expense" onPress={() => router.push('/add-recurring-expense')} />
+        ) : null}
+        {tab === 'INCOME' ? (
+          <AddRow label="New income" onPress={() => router.push('/add-income')} />
+        ) : null}
 
         {/* Every tab body query is gated on `month` being known (`enabled: !!month` in
             budgetHomeQueries.ts), so while currentMonth is loading or failed, activeQuery is

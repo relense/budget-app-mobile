@@ -337,6 +337,88 @@ describe('HomeScreen', () => {
     expect(screen.getByText('€4,300.00')).toBeTruthy();
   });
 
+  it('navigates to Add Recurring Expense when "New recurrent expense" is pressed', async () => {
+    await renderHomeScreen();
+
+    await fireEvent.press(screen.getByText('Recurrent'));
+    await fireEvent.press(screen.getByText('New recurrent expense'));
+
+    expect(mockedRouterPush).toHaveBeenCalledWith('/add-recurring-expense');
+  });
+
+  it('navigates to Edit Recurring Expense, with the right params, when a Recurrent row is swipe-edited', async () => {
+    await renderHomeScreen();
+
+    await fireEvent.press(screen.getByText('Recurrent'));
+    await fireEvent.press(screen.getByTestId('swipe-edit-action-re-water'));
+
+    expect(mockedRouterPush).toHaveBeenCalledWith({
+      pathname: '/edit-recurring-expense',
+      params: {
+        recurringExpenseId: 're-water',
+        name: 'Water',
+        amountCents: '2196',
+        categoryId: 'c-shopping',
+        categoryIcon: 'cart',
+        categoryColor: '#4C6EF5',
+        budgetType: 'NEED',
+        dueDay: '10',
+        paidThisMonth: 'false',
+        transactionIds: '[]',
+      },
+    });
+  });
+
+  it('navigates to Add Income when "New income" is pressed', async () => {
+    await renderHomeScreen();
+
+    await fireEvent.press(screen.getByText('Income'));
+    await fireEvent.press(screen.getByText('New income'));
+
+    expect(mockedRouterPush).toHaveBeenCalledWith('/add-income');
+  });
+
+  it('navigates to Edit Category, with the right params, when an Income row is swipe-edited', async () => {
+    await renderHomeScreen();
+
+    await fireEvent.press(screen.getByText('Income'));
+    await fireEvent.press(screen.getByTestId('swipe-edit-action-cm-obconnect'));
+
+    expect(mockedRouterPush).toHaveBeenCalledWith({
+      pathname: '/edit-category',
+      params: {
+        categoryMonthId: 'cm-obconnect',
+        categoryId: 'c-obconnect',
+        name: 'Obconnect',
+        icon: 'briefcase',
+        color: '#2F9E44',
+        budgetType: '',
+        direction: 'INCOME',
+        monthlyBudgetCents: '430000',
+      },
+    });
+  });
+
+  it('navigates to Income Received, with the right params, when an Income row is tapped', async () => {
+    await renderHomeScreen();
+
+    await fireEvent.press(screen.getByText('Income'));
+    await fireEvent.press(screen.getByTestId('income-row-cm-obconnect'));
+
+    expect(mockedRouterPush).toHaveBeenCalledWith({
+      pathname: '/income-received',
+      params: {
+        categoryMonthId: 'cm-obconnect',
+        name: 'Obconnect',
+        icon: 'briefcase',
+        color: '#2F9E44',
+        monthlyBudgetCents: '430000',
+        actualAmountCents: '368600',
+        transactionIds: '["t-obconnect-1"]',
+      },
+    });
+  });
+
   it('opens the header metric menu and switches to Total Balance', async () => {
     await renderHomeScreen();
 
