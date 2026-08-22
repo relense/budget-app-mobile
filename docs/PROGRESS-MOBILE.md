@@ -242,7 +242,7 @@ default.
       `thisTransaction ÷ budget` instead of the category's cumulative
       `actualAmountCents ÷ budget` (only visibly wrong once a category has
       more than one transaction) — `TRANSACTIONS_QUERY` now also fetches
-      `categoryMonth.actualAmountCents`. 241 tests total across 32 suites.
+      `categoryMonth.actualAmountCents`. 245 tests total across 32 suites.
 
 **Scaffold caveats worth knowing before the next `npm install` in this
 repo** (SDK 57 is very new — pin these deliberately, don't let npm grab
