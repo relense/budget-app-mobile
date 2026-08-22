@@ -358,6 +358,7 @@ describe('HomeScreen', () => {
         budgetType: 'NEED',
         direction: 'EXPENSE',
         monthlyBudgetCents: '70000',
+        recurringCommittedCents: '0',
       },
     });
   });
@@ -532,6 +533,7 @@ describe('HomeScreen', () => {
         budgetType: '',
         direction: 'INCOME',
         monthlyBudgetCents: '430000',
+        recurringCommittedCents: '0',
       },
     });
   });

@@ -342,6 +342,145 @@ describe('EditCategoryScreen', () => {
     expect(updateBudgetMutateAsync).toHaveBeenCalled();
   });
 
+  describe('recurring-expense minimum budget', () => {
+    it('shows no hint and no floor when the category has no recurring expenses (recurringCommittedCents 0)', async () => {
+      await renderScreen();
+
+      expect(screen.queryByTestId('minimum-budget-hint')).toBeNull();
+    });
+
+    it('shows the minimum-budget hint in red when recurringCommittedCents is above 0', async () => {
+      mockedUseLocalSearchParams.mockReturnValue({
+        categoryMonthId: 'cm-1',
+        categoryId: 'c-1',
+        name: 'Shopping',
+        icon: 'cart',
+        color: '#4C6EF5',
+        budgetType: 'NEED',
+        direction: 'EXPENSE',
+        monthlyBudgetCents: '70000',
+        recurringCommittedCents: '20000',
+      });
+      await renderScreen();
+
+      const hint = screen.getByTestId('minimum-budget-hint');
+      expect(hint.props.children.join('')).toContain('Minimum €200.00');
+      const flatten = (style: unknown) => ([] as unknown[]).concat(style).filter(Boolean);
+      const hintColor = (flatten(hint.props.style) as Record<string, unknown>[]).find(
+        (s) => 'color' in s,
+      )?.color;
+      const deleteButtonColor = (
+        flatten(screen.getByTestId('delete-category-button').props.style) as Record<
+          string,
+          unknown
+        >[]
+      ).find((s) => 'backgroundColor' in s)?.backgroundColor;
+      expect(hintColor).toBe(deleteButtonColor);
+    });
+
+    it('clearing the amount shows the recurring-expense total as a gray placeholder, not "0"', async () => {
+      mockedUseLocalSearchParams.mockReturnValue({
+        categoryMonthId: 'cm-1',
+        categoryId: 'c-1',
+        name: 'Shopping',
+        icon: 'cart',
+        color: '#4C6EF5',
+        budgetType: 'NEED',
+        direction: 'EXPENSE',
+        monthlyBudgetCents: '70000',
+        recurringCommittedCents: '20000',
+      });
+      await renderScreen();
+
+      await fireEvent.press(screen.getByTestId('keypad-backspace'));
+
+      const amountValue = screen.getByTestId('amount-value');
+      expect(amountValue.props.children).toBe('200.00');
+      const flatten = (style: unknown) => ([] as unknown[]).concat(style).filter(Boolean);
+      const color = (flatten(amountValue.props.style) as Record<string, unknown>[]).find(
+        (s) => 'color' in s,
+      )?.color;
+      expect(color).not.toBeUndefined();
+    });
+
+    it('disables Confirm once the typed amount drops below the recurring-expense total', async () => {
+      mockedUseLocalSearchParams.mockReturnValue({
+        categoryMonthId: 'cm-1',
+        categoryId: 'c-1',
+        name: 'Shopping',
+        icon: 'cart',
+        color: '#4C6EF5',
+        budgetType: 'NEED',
+        direction: 'EXPENSE',
+        monthlyBudgetCents: '70000',
+        recurringCommittedCents: '20000',
+      });
+      await renderScreen();
+
+      // First backspace clears the pre-filled amount to blank (still valid -- effective value
+      // falls back to the minimum itself); typing "5" from scratch lands on 5 cents, well below
+      // the 20000-cent minimum.
+      await fireEvent.press(screen.getByTestId('keypad-backspace'));
+      expect(screen.getByTestId('keypad-confirm').props.accessibilityState?.disabled).toBe(false);
+
+      await fireEvent.press(screen.getByTestId('keypad-digit-5'));
+      expect(screen.getByTestId('keypad-confirm').props.accessibilityState?.disabled).toBe(true);
+    });
+
+    it('confirming while the amount is left blank submits the recurring-expense total itself, not 0', async () => {
+      mockedUseLocalSearchParams.mockReturnValue({
+        categoryMonthId: 'cm-1',
+        categoryId: 'c-1',
+        name: 'Shopping',
+        icon: 'cart',
+        color: '#4C6EF5',
+        budgetType: 'NEED',
+        direction: 'EXPENSE',
+        monthlyBudgetCents: '70000',
+        recurringCommittedCents: '20000',
+      });
+      await renderScreen();
+
+      await fireEvent.press(screen.getByTestId('keypad-backspace'));
+      await fireEvent.press(screen.getByTestId('keypad-confirm'));
+
+      expect(updateBudgetMutateAsync).toHaveBeenCalledWith({
+        categoryMonthId: 'cm-1',
+        monthlyBudgetCents: 20000,
+      });
+      expect(mockedRouterBack).toHaveBeenCalled();
+    });
+
+    it('allows submitting a typed amount at or above the minimum', async () => {
+      mockedUseLocalSearchParams.mockReturnValue({
+        categoryMonthId: 'cm-1',
+        categoryId: 'c-1',
+        name: 'Shopping',
+        icon: 'cart',
+        color: '#4C6EF5',
+        budgetType: 'NEED',
+        direction: 'EXPENSE',
+        monthlyBudgetCents: '70000',
+        recurringCommittedCents: '20000',
+      });
+      await renderScreen();
+
+      // "250" with no decimal point -> amountTextToCents parses it as €250.00 = 25000 cents,
+      // above the 20000-cent (€200.00) minimum.
+      await fireEvent.press(screen.getByTestId('keypad-backspace'));
+      await fireEvent.press(screen.getByTestId('keypad-digit-2'));
+      await fireEvent.press(screen.getByTestId('keypad-digit-5'));
+      await fireEvent.press(screen.getByTestId('keypad-digit-0'));
+      await fireEvent.press(screen.getByTestId('keypad-confirm'));
+
+      expect(updateBudgetMutateAsync).toHaveBeenCalledWith({
+        categoryMonthId: 'cm-1',
+        monthlyBudgetCents: 25000,
+      });
+      expect(mockedRouterBack).toHaveBeenCalled();
+    });
+  });
+
   it('swallows the first tap outside the keyboard instead of also pressing what is underneath', async () => {
     await renderScreen();
 

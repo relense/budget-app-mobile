@@ -237,6 +237,7 @@ export default function HomeScreen() {
                 budgetType: cm.category.budgetType ?? '',
                 direction: cm.category.direction,
                 monthlyBudgetCents: String(cm.monthlyBudgetCents),
+                recurringCommittedCents: String(cm.recurringCommittedCents),
               },
             })
           }
@@ -346,6 +347,7 @@ export default function HomeScreen() {
                 budgetType: cm.category.budgetType ?? '',
                 direction: cm.category.direction,
                 monthlyBudgetCents: String(cm.monthlyBudgetCents),
+                recurringCommittedCents: String(cm.recurringCommittedCents),
               },
             })
           }

@@ -53,6 +53,7 @@ export default function EditCategoryScreen() {
     budgetType: string;
     direction: string;
     monthlyBudgetCents: string;
+    recurringCommittedCents: string;
   }>();
   const updateBudget = useUpdateCategoryMonthBudget();
   const updateCategory = useUpdateCategory();
@@ -100,7 +101,22 @@ export default function EditCategoryScreen() {
   const iconPalette = isIncome ? INCOME_ICON_PALETTE : EXPENSE_ICON_PALETTE;
   const color = isIncome ? colorForIncomeIcon(icon) : colorForIcon(icon);
   const budgetLabel = isIncome ? 'Expected income' : 'Total budget';
-  const canSubmit = !updateBudget.isPending && !updateCategory.isPending && name.trim().length > 0;
+  // The floor this category's budget can't go below: whatever's already committed to it via
+  // recurring expenses (see syncCategoryMonthBudget) -- a manually-set budget lower than that
+  // would immediately contradict money the user has already committed to spending. Always 0 for
+  // an income category (recurring expenses are expense-only) or one with no recurring expenses.
+  const minimumBudgetCents = Number(params.recurringCommittedCents || '0');
+  // While the field is blank (backspaced to nothing), its effective value is the minimum itself
+  // -- both what's shown as the placeholder below and what actually gets submitted if the user
+  // confirms without typing a new number, same "the placeholder is a real, submittable default"
+  // pattern as due-day elsewhere in this app.
+  const effectiveAmountCents =
+    amountText === '' ? minimumBudgetCents : amountTextToCents(amountText);
+  const canSubmit =
+    !updateBudget.isPending &&
+    !updateCategory.isPending &&
+    name.trim().length > 0 &&
+    effectiveAmountCents >= minimumBudgetCents;
 
   function handleDigit(digit: string) {
     if (!hasEditedAmount) {
@@ -147,7 +163,7 @@ export default function EditCategoryScreen() {
       }
       await updateBudget.mutateAsync({
         categoryMonthId: params.categoryMonthId,
-        monthlyBudgetCents: amountTextToCents(amountText),
+        monthlyBudgetCents: effectiveAmountCents,
       });
       router.back();
     } catch {
@@ -211,10 +227,25 @@ export default function EditCategoryScreen() {
         <Text style={[styles.budgetLabel, { color: colors.text.secondary }]}>{budgetLabel}</Text>
         <Text style={styles.amountRow}>
           <Text style={[styles.currencyPrefix, { color: colors.text.secondary }]}>€</Text>
-          <Text style={[styles.amountText, { color: colors.text.primary }]}>
-            {amountText || '0'}
+          <Text
+            testID="amount-value"
+            style={[
+              styles.amountText,
+              { color: amountText === '' ? colors.text.placeholder : colors.text.primary },
+            ]}
+          >
+            {amountText || centsToAmountText(minimumBudgetCents)}
           </Text>
         </Text>
+        {minimumBudgetCents > 0 ? (
+          <Text
+            testID="minimum-budget-hint"
+            style={[styles.minimumBudgetHint, { color: colors.button.deleteBackground }]}
+          >
+            Minimum €{centsToAmountText(minimumBudgetCents)} — already committed to recurring
+            expenses this month
+          </Text>
+        ) : null}
 
         <View style={styles.keypadWrap}>
           <AmountKeypad
@@ -334,6 +365,12 @@ const styles = StyleSheet.create({
   amountText: {
     fontSize: 50,
     fontFamily: 'Fredoka_400Regular',
+  },
+  minimumBudgetHint: {
+    textAlign: 'center',
+    marginTop: -4,
+    marginBottom: 8,
+    fontSize: 12,
   },
   keypadWrap: {
     flex: 1,

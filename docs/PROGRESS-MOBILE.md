@@ -803,6 +803,26 @@ default.
       deliberate manual edit should just win, full stop. 415 tests total
       across 42 suites (6 new for `syncCategoryMonthBudget` itself, 3 for
       the create-screen integration, 4 for the edit-screen integration).
+- [x] Follow-up to the above, per explicit user request: `edit-category.tsx`
+      now enforces a **hard minimum** on a category's budget equal to its
+      `recurringCommittedCents` (grilled the user on soft-hint-only vs.
+      hard-floor first — they picked hard floor). `CategoryMonth.recurringCommittedCents`
+      is threaded as a new `recurringCommittedCents` route param from both
+      of `index.tsx`'s `/edit-category` navigations (Available and Income
+      tabs — always 0 for Income, since recurring expenses are
+      expense-only). On the edit screen: clearing the amount field now
+      shows that minimum as a gray placeholder (not `"0"`) and — if
+      confirmed while still blank — submits that exact value, same
+      "the placeholder is a real, submittable default" pattern as
+      due-day elsewhere; `canSubmit` now also requires the effective
+      amount to be `>=` the minimum, so typing something lower disables
+      Confirm; a red hint line ("Minimum €X.XX — already committed to
+      recurring expenses this month", styled with the same
+      `colors.button.deleteBackground` red already used for this
+      screen's inline error text) shows underneath whenever the minimum
+      is above 0. 421 tests total across 42 suites (6 new for this
+      screen, 2 existing `index.test.tsx` navigation-param assertions
+      updated for the new param).
 
 **Scaffold caveats worth knowing before the next `npm install` in this
 repo** (SDK 57 is very new — pin these deliberately, don't let npm grab
