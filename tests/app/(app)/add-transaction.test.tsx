@@ -177,15 +177,16 @@ describe('AddTransactionScreen', () => {
     expect(screen.getByText('Shopping')).toBeTruthy();
   });
 
-  it('preselects the category used by the most recently created transaction, over the first-in-list default', async () => {
+  it('preselects the category used by the most recently dated transaction this month, over the first-in-list default', async () => {
     mockedUseTransactions.mockReturnValue({
-      // transactions(month) is already ordered date DESC, createdAt DESC -- [0] is the most
-      // recently created, not necessarily the one with the latest date.
+      // transactions(month) is ordered date DESC, createdAt DESC -- date is the primary key, so
+      // [0] here is 't-2' (dated 09-02, the later date), not necessarily whichever was entered
+      // most recently. Fixture ordering matches that real contract, not creation order.
       data: [
         {
           id: 't-2',
           amountCents: 1200,
-          date: '2026-09-01',
+          date: '2026-09-02',
           merchant: 'Cafe',
           note: null,
           direction: 'EXPENSE',
@@ -194,7 +195,7 @@ describe('AddTransactionScreen', () => {
         {
           id: 't-1',
           amountCents: 968,
-          date: '2026-09-02',
+          date: '2026-09-01',
           merchant: 'Continente',
           note: null,
           direction: 'EXPENSE',
@@ -211,7 +212,7 @@ describe('AddTransactionScreen', () => {
     expect(screen.getByText('Eating Out')).toBeTruthy();
   });
 
-  it('falls back to the first active expense category if the last-used category is no longer active this month', async () => {
+  it('falls back to the first active expense category if the most recently dated transaction\'s category is no longer active this month', async () => {
     mockedUseTransactions.mockReturnValue({
       data: [
         {
@@ -234,7 +235,7 @@ describe('AddTransactionScreen', () => {
     expect(screen.getByText('Shopping')).toBeTruthy();
   });
 
-  it('still lets the user pick a different category, overriding the last-used default', async () => {
+  it('still lets the user pick a different category, overriding the recently-dated-transaction default', async () => {
     mockedUseTransactions.mockReturnValue({
       data: [
         {
