@@ -132,23 +132,33 @@ describe('EditRecurringExpenseScreen', () => {
     expect(screen.queryByTestId('keypad-confirm')).toBeNull();
   });
 
-  it('pre-fills name, amount, and due day from route params -- amount and the due-date row are both visible at once, with no "Amount" label', async () => {
+  it('pre-fills name and amount from route params, showing the amount by default with no "Amount" label and no due-date row visible yet', async () => {
     await renderScreen();
 
     expect(screen.getByTestId('recurring-name-input').props.value).toBe('Water');
     expect(screen.queryByText('Amount')).toBeNull();
     expect(screen.getByTestId('calculator-value').props.children).toBe('21.96');
-    expect(screen.getByTestId('due-day-value').props.children).toBe('10');
-    expect(screen.getByTestId('due-month-year-value').props.children).toBe(' Sep 2026');
+    expect(screen.queryByTestId('due-day-value')).toBeNull();
   });
 
-  it('toggling into day-entry mode does not hide or change the amount', async () => {
+  it('pressing the calendar key swaps the display to the pre-filled due date (day gray, fixed month/year black), same as Add Transaction -- the amount is no longer shown', async () => {
     await renderScreen();
 
     await fireEvent.press(screen.getByTestId('keypad-toggle-date'));
 
-    expect(screen.getByTestId('calculator-value').props.children).toBe('21.96');
+    expect(screen.queryByTestId('calculator-value')).toBeNull();
     expect(screen.getByTestId('due-day-value').props.children).toBe('10');
+    expect(screen.getByTestId('due-month-year-value').props.children).toBe(' Sep 2026');
+  });
+
+  it('toggling back to amount mode restores the amount display', async () => {
+    await renderScreen();
+
+    await fireEvent.press(screen.getByTestId('keypad-toggle-date'));
+    await fireEvent.press(screen.getByTestId('keypad-toggle-date'));
+
+    expect(screen.getByTestId('calculator-value').props.children).toBe('21.96');
+    expect(screen.queryByTestId('due-day-value')).toBeNull();
   });
 
   it('the Paid/Unpaid pill is a full-width banner, not a small round pill', async () => {

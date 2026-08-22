@@ -111,10 +111,9 @@ export default function EditRecurringExpenseScreen() {
   const [hasEditedAmount, setHasEditedAmount] = useState(false);
   const [paid, setPaid] = useState(params.paidThisMonth === 'true');
   // Whether the shared keypad is in day-entry mode (its calendar-toggle key) instead of
-  // amount-entry -- same mechanism add-transaction.tsx uses for its date. Unlike
-  // add-transaction.tsx, the amount display never hides/swaps for the due-date row -- both stay
-  // visible at all times, dateMode only decides which one the keypad's digits/backspace
-  // currently affect.
+  // amount-entry -- same mechanism/swap behavior as add-transaction.tsx's date: pressing the
+  // toggle key replaces the single calculator display with the due-day value instead of
+  // showing both at once.
   const [dateMode, setDateMode] = useState(false);
   const [overlay, setOverlay] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
@@ -322,22 +321,32 @@ export default function EditRecurringExpenseScreen() {
         </View>
 
         <Text style={styles.amountRow}>
-          <Text style={[styles.currencyPrefix, { color: colors.text.secondary }]}>€</Text>
-          <Text
-            testID="calculator-value"
-            style={[typography.scale.calculatorAmount, { color: colors.text.primary }]}
-          >
-            {amountText || '0'}
-          </Text>
-        </Text>
-
-        <Text style={styles.dueDateRow}>
-          <Text testID="due-day-value" style={[styles.dueDateText, { color: colors.text.placeholder }]}>
-            {dueDayDigits === '' ? DUE_DAY_UNSET_PLACEHOLDER : formatTypedDay(dueDayDigits)}
-          </Text>
-          <Text testID="due-month-year-value" style={[styles.dueDateText, { color: colors.text.primary }]}>
-            {month ? ` ${formatMonthYearLabel(month)}` : ''}
-          </Text>
+          {dateMode ? (
+            <>
+              <Text
+                testID="due-day-value"
+                style={[typography.scale.calculatorAmount, { color: colors.text.placeholder }]}
+              >
+                {dueDayDigits === '' ? DUE_DAY_UNSET_PLACEHOLDER : formatTypedDay(dueDayDigits)}
+              </Text>
+              <Text
+                testID="due-month-year-value"
+                style={[typography.scale.calculatorAmount, { color: colors.text.primary }]}
+              >
+                {month ? ` ${formatMonthYearLabel(month)}` : ''}
+              </Text>
+            </>
+          ) : (
+            <>
+              <Text style={[styles.currencyPrefix, { color: colors.text.secondary }]}>€</Text>
+              <Text
+                testID="calculator-value"
+                style={[typography.scale.calculatorAmount, { color: colors.text.primary }]}
+              >
+                {amountText || '0'}
+              </Text>
+            </>
+          )}
         </Text>
 
         <View style={styles.keypadWrap}>
@@ -462,17 +471,10 @@ const styles = StyleSheet.create({
   amountRow: {
     textAlign: 'center',
     marginTop: 4,
+    marginBottom: 8,
   },
   currencyPrefix: {
     fontSize: 26,
-    fontFamily: 'Fredoka_400Regular',
-  },
-  dueDateRow: {
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  dueDateText: {
-    fontSize: 16,
     fontFamily: 'Fredoka_400Regular',
   },
   keypadWrap: {

@@ -149,37 +149,51 @@ describe('AddRecurringExpenseScreen', () => {
     expect(screen.queryByTestId('category-picker-backdrop')).toBeNull();
   });
 
-  it('shows the amount and the due-date row (day placeholder + fixed month/year) at the same time -- neither hides the other, and there is no "Amount" label', async () => {
+  it('shows the amount by default, with no "Amount" label and no due-date row visible yet', async () => {
     await renderScreen();
 
     expect(screen.queryByText('Amount')).toBeNull();
     expect(screen.getByTestId('calculator-value').props.children).toBe('0');
+    expect(screen.queryByTestId('due-day-value')).toBeNull();
+    expect(screen.queryByTestId('due-month-year-value')).toBeNull();
+  });
+
+  it('pressing the calendar key swaps the single calculator display over to the due date (day placeholder + fixed month/year), same as Add Transaction -- the amount is no longer shown', async () => {
+    await renderScreen();
+
+    await fireEvent.press(screen.getByTestId('keypad-toggle-date'));
+
+    expect(screen.queryByTestId('calculator-value')).toBeNull();
     expect(screen.getByTestId('due-day-value').props.children).toBe('--');
     expect(screen.getByTestId('due-month-year-value').props.children).toBe(' Sep 2026');
   });
 
-  it('toggling into day-entry mode does not hide or change the amount -- only the due-day row updates as digits are typed', async () => {
+  it('typing digits in day-entry mode updates the due-day value shown in that same swapped display', async () => {
     await renderScreen();
 
     await fireEvent.press(screen.getByTestId('keypad-toggle-date'));
     await fireEvent.press(screen.getByTestId('keypad-digit-1'));
     await fireEvent.press(screen.getByTestId('keypad-digit-0'));
 
-    expect(screen.getByTestId('calculator-value').props.children).toBe('0');
     expect(screen.getByTestId('due-day-value').props.children).toBe('10');
     expect(screen.getByTestId('due-month-year-value').props.children).toBe(' Sep 2026');
   });
 
-  it('typing an amount after typing a due day leaves the due day exactly as typed', async () => {
+  it('toggling back to amount mode restores the amount display and preserves the typed due day for later', async () => {
     await renderScreen();
 
     await fireEvent.press(screen.getByTestId('keypad-toggle-date'));
     await fireEvent.press(screen.getByTestId('keypad-digit-1'));
     await fireEvent.press(screen.getByTestId('keypad-digit-0'));
     await fireEvent.press(screen.getByTestId('keypad-toggle-date'));
-    await fireEvent.press(screen.getByTestId('keypad-digit-5'));
 
+    expect(screen.getByTestId('calculator-value').props.children).toBe('0');
+    expect(screen.queryByTestId('due-day-value')).toBeNull();
+
+    await fireEvent.press(screen.getByTestId('keypad-digit-5'));
     expect(screen.getByTestId('calculator-value').props.children).toBe('5');
+
+    await fireEvent.press(screen.getByTestId('keypad-toggle-date'));
     expect(screen.getByTestId('due-day-value').props.children).toBe('10');
   });
 

@@ -644,6 +644,22 @@ default.
       above) since `dueDate` is a read-only computed field, not something
       `updateRecurringExpense`/`createRecurringExpense` accept. 398 tests
       total across 42 suites (one test's assertion changed, not added).
+- [x] Corrected a misreading from two rounds back: Add/Edit Recurring
+      Expense's calculator now **swaps** between amount and due-date
+      display (single calculator area, toggled by the keypad's calendar
+      key) — same mechanism/behavior as `add-transaction.tsx`'s date,
+      not the "both always visible in two separate rows" layout built
+      right after the "don't shrink the calculator" feedback. That
+      feedback was actually about the *keypad itself* getting physically
+      smaller (the old `ScrollView` + `minHeight: 260` container, fixed
+      separately by switching to `flex: 1`), not about wanting the amount
+      permanently on screen. The day/month-year gray/black split styling
+      and month-aware validation from the previous pass are unchanged,
+      just folded back into the one swapped display instead of a second
+      permanent row — `dueDateRow`/`dueDateText` styles removed from both
+      screens. 400 tests total across 42 suites.
+
+**Scaffold caveats worth knowing before the next `npm install` in this
 repo** (SDK 57 is very new — pin these deliberately, don't let npm grab
 latest):
 
