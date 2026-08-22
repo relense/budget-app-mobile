@@ -112,7 +112,7 @@ const incomeCategoryMonths = [
       budgetType: null,
       direction: 'INCOME',
     },
-    transactions: [{ date: '2026-09-01' }],
+    transactions: [{ id: 't-obconnect-1', date: '2026-09-01' }],
   },
 ];
 

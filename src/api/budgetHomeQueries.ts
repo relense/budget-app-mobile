@@ -31,6 +31,7 @@ const CATEGORY_MONTHS_QUERY = `
         direction
       }
       transactions {
+        id
         date
       }
     }
@@ -56,6 +57,7 @@ const RECURRING_EXPENSES_QUERY = `
         direction
       }
       transactions {
+        id
         date
       }
     }

@@ -11,6 +11,7 @@ export interface Category {
 }
 
 export interface TransactionDate {
+  id: string;
   date: string;
 }
 
