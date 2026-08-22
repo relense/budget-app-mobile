@@ -115,6 +115,17 @@ describe('AddTransactionScreen', () => {
     expect(screen.queryByTestId('keypad-confirm')).toBeNull();
   });
 
+  it('shows a loading state while transactions are still loading, even though the month and categories are ready', async () => {
+    // The category pill's default depends on transactionsQuery.data -- rendering the form
+    // before it resolves would show the wrong default pill for a moment.
+    mockedUseTransactions.mockReturnValue({ data: undefined, isLoading: true, isError: false, refetch: jest.fn() });
+
+    await renderScreen();
+
+    expect(screen.getByTestId('add-transaction-loading')).toBeTruthy();
+    expect(screen.queryByTestId('keypad-confirm')).toBeNull();
+  });
+
   it('shows a specific, retryable error when the current month fails to load', async () => {
     const refetchMonth = jest.fn();
     const refetchCategoryMonths = jest.fn();
@@ -233,6 +244,50 @@ describe('AddTransactionScreen', () => {
     await renderScreen();
 
     expect(screen.getByText('Shopping')).toBeTruthy();
+  });
+
+  it('skips past a more-recently-dated income transaction to find the last expense category, since this screen only creates expenses', async () => {
+    mockedUseTransactions.mockReturnValue({
+      data: [
+        {
+          id: 't-income',
+          amountCents: 300000,
+          date: '2026-09-02',
+          merchant: 'Salary',
+          note: null,
+          direction: 'INCOME',
+          categoryMonth: {
+            id: 'cm-salary',
+            monthlyBudgetCents: 300000,
+            actualAmountCents: 300000,
+            category: {
+              id: 'c-salary',
+              name: 'Salary',
+              icon: 'briefcase',
+              color: '#2F9E44',
+              budgetType: null,
+              direction: 'INCOME',
+            },
+          },
+        },
+        {
+          id: 't-expense',
+          amountCents: 500,
+          date: '2026-09-01',
+          merchant: 'Cafe',
+          note: null,
+          direction: 'EXPENSE',
+          categoryMonth: eatingOutCategoryMonth,
+        },
+      ],
+      isLoading: false,
+      isError: false,
+      refetch: jest.fn(),
+    });
+
+    await renderScreen();
+
+    expect(screen.getByText('Eating Out')).toBeTruthy();
   });
 
   it('still lets the user pick a different category, overriding the recently-dated-transaction default', async () => {

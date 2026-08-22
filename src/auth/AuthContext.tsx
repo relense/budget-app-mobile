@@ -21,16 +21,22 @@ import { clearStoredTokens, getStoredTokens, setStoredTokens } from './tokenStor
 // real TTL so a refresh usually lands before the token actually expires.
 const PROACTIVE_REFRESH_THRESHOLD_MS = 10 * 60 * 1000;
 
+// Runs `request` with the current access token; if it fails with an UNAUTHENTICATED GraphQL
+// error, refreshes the session (de-duped against any refresh already in flight) and retries
+// `request` exactly once with the new token before giving up. Every query/mutation hook goes
+// through this instead of reading `accessToken` and calling the API directly. Exported so each
+// hook's queryFn/mutationFn body can be pulled out into its own plain, testable function that
+// takes this as a parameter (see e.g. budgetHomeQueries.ts) -- renderHook hangs when combined
+// with react-query in this environment (see docs/PROGRESS-MOBILE.md), so this is what makes the
+// "does this hook actually route through requestWithAuth" wiring unit-testable at all.
+export type RequestWithAuth = <T>(request: (accessToken: string) => Promise<T>) => Promise<T>;
+
 interface AuthContextValue {
   status: 'loading' | 'signedIn' | 'signedOut';
   accessToken: string | null;
   signIn: (tokens: AuthTokens) => Promise<void>;
   signOut: () => Promise<void>;
-  // Runs `request` with the current access token; if it fails with an UNAUTHENTICATED GraphQL
-  // error, refreshes the session (de-duped against any refresh already in flight) and retries
-  // `request` exactly once with the new token before giving up. Every query/mutation hook goes
-  // through this instead of reading `accessToken` and calling the API directly.
-  requestWithAuth: <T>(request: (accessToken: string) => Promise<T>) => Promise<T>;
+  requestWithAuth: RequestWithAuth;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);

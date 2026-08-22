@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
-import { useAuth } from '../auth/AuthContext';
+import { useAuth, type RequestWithAuth } from '../auth/AuthContext';
 import { getApiUrl } from '../lib/apiUrl';
 import { graphqlRequest } from './graphqlClient';
 
@@ -91,18 +91,33 @@ export async function deleteTransaction(
   });
 }
 
+// Plain, requestWithAuth-taking mutation functions -- see the comment above the queryFn
+// helpers in budgetHomeQueries.ts for why (unit-testable without renderHook).
+export function createTransactionMutationFn(requestWithAuth: RequestWithAuth) {
+  return (input: CreateTransactionInput) =>
+    requestWithAuth((token) => createTransaction(getApiUrl(), token, input));
+}
+
+export function updateTransactionMutationFn(requestWithAuth: RequestWithAuth) {
+  return (input: UpdateTransactionInput) =>
+    requestWithAuth((token) => updateTransaction(getApiUrl(), token, input));
+}
+
+export function deleteTransactionMutationFn(requestWithAuth: RequestWithAuth) {
+  return (input: DeleteTransactionInput) =>
+    requestWithAuth((token) => deleteTransaction(getApiUrl(), token, input));
+}
+
 // A new/changed/removed transaction changes what three different queries would return: the
 // transactions list itself, the owning CategoryMonth's actualAmountCents (and therefore the
-// Available tab's numbers, and the per-row cumulative-spend percent on the Expenses tab), and
-// the bank balance (derived from every transaction since its checkpoint) -- so all three
-// mutations below invalidate the same set.
+// Available tab's spent/budget numbers), and the bank balance (derived from every transaction
+// since its checkpoint) -- so all three mutations below invalidate the same set.
 export function useCreateTransaction() {
   const { requestWithAuth } = useAuth();
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (input: CreateTransactionInput) =>
-      requestWithAuth((token) => createTransaction(getApiUrl(), token, input)),
+    mutationFn: createTransactionMutationFn(requestWithAuth),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
       queryClient.invalidateQueries({ queryKey: ['categoryMonths'] });
@@ -116,8 +131,7 @@ export function useUpdateTransaction() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (input: UpdateTransactionInput) =>
-      requestWithAuth((token) => updateTransaction(getApiUrl(), token, input)),
+    mutationFn: updateTransactionMutationFn(requestWithAuth),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
       queryClient.invalidateQueries({ queryKey: ['categoryMonths'] });
@@ -131,8 +145,7 @@ export function useDeleteTransaction() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (input: DeleteTransactionInput) =>
-      requestWithAuth((token) => deleteTransaction(getApiUrl(), token, input)),
+    mutationFn: deleteTransactionMutationFn(requestWithAuth),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
       queryClient.invalidateQueries({ queryKey: ['categoryMonths'] });
