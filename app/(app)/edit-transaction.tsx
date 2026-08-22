@@ -282,6 +282,7 @@ export default function EditTransactionScreen() {
           testID="delete-transaction-button"
           style={[styles.deleteButton, { backgroundColor: colors.button.deleteBackground }]}
           onPress={handleDeletePress}
+          disabled={deleteTransaction.isPending || updateTransaction.isPending}
         >
           <MaterialCommunityIcons name="trash-can-outline" size={18} color={colors.text.onDark} />
           <Text style={[styles.deleteLabel, { color: colors.text.onDark }]}>Delete</Text>

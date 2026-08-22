@@ -49,8 +49,8 @@ export default function AddTransactionScreen() {
   const [amountText, setAmountText] = useState('');
   const [merchant, setMerchant] = useState('');
   const [transactionDate, setTransactionDate] = useState(todayIsoDate());
-  // Only overrides the default once, and only if the user hasn't already picked a day
-  // themselves -- see the effect below.
+  // Whether the user has picked a day themselves via the date-mode keypad -- see
+  // effectiveDate below.
   const [dateTouched, setDateTouched] = useState(false);
   const [dateMode, setDateMode] = useState(false);
   const [dayDigits, setDayDigits] = useState('');
@@ -69,13 +69,9 @@ export default function AddTransactionScreen() {
   // Today's real date is only a valid default while it actually falls within the current
   // active month -- e.g. if the previous month hasn't been locked yet, "today" could be in a
   // later calendar month than the one every categoryMonthId here actually belongs to. Falls
-  // back to the 1st of the active month instead.
-  useEffect(() => {
-    if (!month || dateTouched) return;
-    if (todayIsoDate().slice(0, 7) !== month) {
-      setTransactionDate(`${month}-01`);
-    }
-  }, [month, dateTouched]);
+  // back to the 1st of the active month instead, unless the user has picked a day themselves.
+  const effectiveDate =
+    !dateTouched && month && todayIsoDate().slice(0, 7) !== month ? `${month}-01` : transactionDate;
 
   const isCatalogLoading = currentMonthQuery.isLoading || expenseCategoryMonths.isLoading;
   const isCatalogError = currentMonthQuery.isError || expenseCategoryMonths.isError;
@@ -92,7 +88,7 @@ export default function AddTransactionScreen() {
   // immediately instead of a blank field -- see mockups/Shopping calendar pressed.png. Month
   // and year are always the fixed current month, shown alongside but never typed.
   const dayDisplayText =
-    dayDigits === '' ? isoDateToDayDigits(transactionDate) : formatTypedDay(dayDigits);
+    dayDigits === '' ? isoDateToDayDigits(effectiveDate) : formatTypedDay(dayDigits);
 
   function handleDigit(digit: string) {
     if (dateMode) {
@@ -139,7 +135,7 @@ export default function AddTransactionScreen() {
       await createTransaction.mutateAsync({
         categoryMonthId: selectedCategoryMonth.id,
         amountCents: amountTextToCents(amountText),
-        date: transactionDate,
+        date: effectiveDate,
         merchant: merchant.trim() || null,
       });
       router.back();
