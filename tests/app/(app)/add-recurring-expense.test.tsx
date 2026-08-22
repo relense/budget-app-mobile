@@ -179,6 +179,27 @@ describe('AddRecurringExpenseScreen', () => {
     expect(screen.getByTestId('due-month-year-value').props.children).toBe(' Sep 2026');
   });
 
+  it('shows the day in gray while it is still just the placeholder, then switches to black once the user types a real day', async () => {
+    function flatten(style: unknown): Record<string, unknown>[] {
+      return ([] as unknown[]).concat(style).filter(Boolean) as Record<string, unknown>[];
+    }
+    function colorOf(testId: string) {
+      return flatten(screen.getByTestId(testId).props.style).find((s) => 'color' in s)?.color;
+    }
+
+    await renderScreen();
+    await fireEvent.press(screen.getByTestId('keypad-toggle-date'));
+
+    const placeholderColor = colorOf('due-day-value');
+    const monthYearColor = colorOf('due-month-year-value');
+
+    await fireEvent.press(screen.getByTestId('keypad-digit-1'));
+
+    expect(colorOf('due-day-value')).not.toBe(placeholderColor);
+    // The typed day now matches the (always black) month/year color, not the placeholder gray.
+    expect(colorOf('due-day-value')).toBe(monthYearColor);
+  });
+
   it('toggling back to amount mode restores the amount display and preserves the typed due day for later', async () => {
     await renderScreen();
 

@@ -17,6 +17,7 @@ import {
   useMarkRecurringPaid,
   useUnmarkRecurringPaid,
 } from '../../../src/api/recurringExpenseMutations';
+import { useCreateTransaction, useDeleteTransaction } from '../../../src/api/transactionMutations';
 import { useAuth } from '../../../src/auth/AuthContext';
 import { ThemeProvider } from '../../../src/theme/ThemeProvider';
 import { router } from 'expo-router';
@@ -24,6 +25,7 @@ import HomeScreen from '../../../app/(app)/index';
 
 jest.mock('../../../src/api/budgetHomeQueries');
 jest.mock('../../../src/api/recurringExpenseMutations');
+jest.mock('../../../src/api/transactionMutations');
 jest.mock('../../../src/auth/AuthContext');
 jest.mock('../../../src/lib/today', () => ({
   todayIsoDate: () => '2026-09-15',
@@ -67,10 +69,14 @@ const mockedUseTransactions = useTransactions as jest.Mock;
 const mockedUseBankBalance = useBankBalance as jest.Mock;
 const mockedUseMarkRecurringPaid = useMarkRecurringPaid as jest.Mock;
 const mockedUseUnmarkRecurringPaid = useUnmarkRecurringPaid as jest.Mock;
+const mockedUseCreateTransaction = useCreateTransaction as jest.Mock;
+const mockedUseDeleteTransaction = useDeleteTransaction as jest.Mock;
 const mockedUseAuth = useAuth as jest.Mock;
 const mockSignOut = jest.fn();
 const markRecurringPaidMutateAsync = jest.fn();
 const unmarkRecurringPaidMutateAsync = jest.fn();
+const createTransactionMutateAsync = jest.fn();
+const deleteTransactionMutateAsync = jest.fn();
 
 const idle = { data: undefined, isLoading: false, isError: false, refetch: jest.fn() };
 
@@ -254,6 +260,16 @@ beforeEach(() => {
   unmarkRecurringPaidMutateAsync.mockResolvedValue(undefined);
   mockedUseUnmarkRecurringPaid.mockReturnValue({
     mutateAsync: unmarkRecurringPaidMutateAsync,
+    isPending: false,
+  });
+  createTransactionMutateAsync.mockResolvedValue(undefined);
+  mockedUseCreateTransaction.mockReturnValue({
+    mutateAsync: createTransactionMutateAsync,
+    isPending: false,
+  });
+  deleteTransactionMutateAsync.mockResolvedValue(undefined);
+  mockedUseDeleteTransaction.mockReturnValue({
+    mutateAsync: deleteTransactionMutateAsync,
     isPending: false,
   });
 });
@@ -520,44 +536,81 @@ describe('HomeScreen', () => {
     });
   });
 
-  it('navigates to Income Received, with the right params, when an Income row is tapped', async () => {
+  it('shows Received/Not received under the name instead of a date', async () => {
     await renderHomeScreen();
 
     await fireEvent.press(screen.getByText('Income'));
-    await fireEvent.press(screen.getByTestId('income-row-cm-obconnect'));
 
-    expect(mockedRouterPush).toHaveBeenCalledWith({
-      pathname: '/income-received',
-      params: {
-        categoryMonthId: 'cm-obconnect',
-        name: 'Obconnect',
-        icon: 'briefcase',
-        color: '#2F9E44',
-        monthlyBudgetCents: '430000',
-        actualAmountCents: '368600',
-        transactionIds: '["t-obconnect-1"]',
-      },
-    });
+    // Both fixture rows have actualAmountCents > 0.
+    expect(screen.getAllByText('Received')).toHaveLength(2);
+    expect(screen.queryByText('Not received')).toBeNull();
   });
 
-  it('maps each Income row to its own transaction ids, not the first row\'s (tap)', async () => {
+  it('tapping an already-Received Income row unmarks it by deleting every linked transaction, using that row\'s own ids (not another row\'s)', async () => {
     await renderHomeScreen();
 
     await fireEvent.press(screen.getByText('Income'));
     await fireEvent.press(screen.getByTestId('income-row-cm-randstad'));
 
-    expect(mockedRouterPush).toHaveBeenCalledWith({
-      pathname: '/income-received',
-      params: {
-        categoryMonthId: 'cm-randstad',
-        name: 'Randstad',
-        icon: 'briefcase',
-        color: '#F7D6DE',
-        monthlyBudgetCents: '435708',
-        actualAmountCents: '333450',
-        transactionIds: '["t-randstad-1","t-randstad-2"]',
-      },
+    expect(deleteTransactionMutateAsync).toHaveBeenCalledWith({ transactionId: 't-randstad-1' });
+    expect(deleteTransactionMutateAsync).toHaveBeenCalledWith({ transactionId: 't-randstad-2' });
+    expect(deleteTransactionMutateAsync).not.toHaveBeenCalledWith({
+      transactionId: 't-obconnect-1',
     });
+    expect(createTransactionMutateAsync).not.toHaveBeenCalled();
+  });
+
+  it('tapping a Not-received Income row creates one transaction on that row\'s own categoryMonthId, for the expected amount, dated today', async () => {
+    mockedUseCategoryMonths.mockImplementation((_month: string, direction: string) => ({
+      ...idle,
+      data:
+        direction === 'EXPENSE'
+          ? expenseCategoryMonths
+          : [{ ...incomeCategoryMonths[0], actualAmountCents: 0, transactions: [] }],
+    }));
+
+    await renderHomeScreen();
+    await fireEvent.press(screen.getByText('Income'));
+
+    expect(screen.getByText('Not received')).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('income-row-cm-obconnect'));
+
+    expect(createTransactionMutateAsync).toHaveBeenCalledWith({
+      categoryMonthId: 'cm-obconnect',
+      amountCents: 430000,
+      date: '2026-09-15',
+      merchant: null,
+    });
+    expect(deleteTransactionMutateAsync).not.toHaveBeenCalled();
+  });
+
+  it('shows a toast when marking an income received fails', async () => {
+    mockedUseCategoryMonths.mockImplementation((_month: string, direction: string) => ({
+      ...idle,
+      data:
+        direction === 'EXPENSE'
+          ? expenseCategoryMonths
+          : [{ ...incomeCategoryMonths[0], actualAmountCents: 0, transactions: [] }],
+    }));
+    createTransactionMutateAsync.mockRejectedValue(new Error('network error'));
+
+    await renderHomeScreen();
+    await fireEvent.press(screen.getByText('Income'));
+    await fireEvent.press(screen.getByTestId('income-row-cm-obconnect'));
+
+    expect(await screen.findByText('Something went wrong. Please try again.')).toBeTruthy();
+  });
+
+  it('shows a toast when only some linked transactions fail to delete while unmarking an income received (partial clear)', async () => {
+    deleteTransactionMutateAsync
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('network error'));
+
+    await renderHomeScreen();
+    await fireEvent.press(screen.getByText('Income'));
+    await fireEvent.press(screen.getByTestId('income-row-cm-randstad'));
+
+    expect(await screen.findByText('Something went wrong. Please try again.')).toBeTruthy();
   });
 
   it('maps each Income row to its own transaction ids, not the first row\'s (swipe-edit)', async () => {

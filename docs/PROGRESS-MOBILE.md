@@ -658,6 +658,31 @@ default.
       just folded back into the one swapped display instead of a second
       permanent row — `dueDateRow`/`dueDateText` styles removed from both
       screens. 400 tests total across 42 suites.
+- [x] Two more fixes, both narrow. **Due-day color bug**: the day in
+      Add/Edit Recurring Expense's swapped calculator display was always
+      gray (`colors.text.placeholder`), even once a real value was typed
+      or (on Edit) pre-filled from the server — should only be gray while
+      it's genuinely unset (the `--` placeholder); fixed to
+      `dueDayDigits === '' ? colors.text.placeholder : colors.text.primary`
+      in both screens, matching the always-black month/year. **Income
+      Received screen removed entirely** (`app/(app)/income-received.tsx`
+      + its route registration + test deleted) — tapping an Income row
+      now toggles received state directly, no drawer, mirroring the
+      Recurrent tab's icon-tap-to-pay. Not received → received: one plain
+      `Transaction` for the row's expected amount (`monthlyBudgetCents`),
+      dated today, via `useCreateTransaction` — confirmed with the user
+      that `direction` here is server-derived from the income category
+      exactly like every other transaction (see `docs/SERVICES.md`), no
+      special-casing needed. Received → not received: deletes every
+      transaction linked to that `CategoryMonth` this month
+      (`Promise.allSettled`, surfaces a toast on any partial failure,
+      same care as the Recurrent equivalent) — no dedicated
+      `useUnmarkIncomeReceived` hook needed, unlike Recurrent's
+      `useUnmarkRecurringPaid`: "received" is derived from
+      `CategoryMonth.actualAmountCents`, which `useDeleteTransaction`
+      already invalidates. The row's subtitle (previously the most
+      recent transaction's date) now shows "Received"/"Not received"
+      instead. 393 tests total across 41 suites.
 
 **Scaffold caveats worth knowing before the next `npm install` in this
 repo** (SDK 57 is very new — pin these deliberately, don't let npm grab

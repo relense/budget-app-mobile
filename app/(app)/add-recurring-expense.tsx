@@ -227,7 +227,13 @@ export default function AddRecurringExpenseScreen() {
             <>
               <Text
                 testID="due-day-value"
-                style={[typography.scale.calculatorAmount, { color: colors.text.placeholder }]}
+                style={[
+                  typography.scale.calculatorAmount,
+                  {
+                    color:
+                      dueDayDigits === '' ? colors.text.placeholder : colors.text.primary,
+                  },
+                ]}
               >
                 {dueDayDigits === '' ? DUE_DAY_UNSET_PLACEHOLDER : formatTypedDay(dueDayDigits)}
               </Text>

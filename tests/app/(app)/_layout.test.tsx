@@ -28,8 +28,8 @@ jest.mock('expo-router', () => {
 // JSX only actually presents that way if it's also registered here with
 // presentation: 'modal' -- a screen can have the grabber UI built and still push as a plain
 // full-screen stack route if this registration is missing (exactly what happened to
-// add-recurring-expense/edit-recurring-expense/add-income/income-received: the JSX was right,
-// this file just never listed them).
+// add-recurring-expense/edit-recurring-expense/add-income: the JSX was right, this file just
+// never listed them).
 const MODAL_SCREENS = [
   'add-category',
   'edit-category',
@@ -38,7 +38,6 @@ const MODAL_SCREENS = [
   'add-recurring-expense',
   'edit-recurring-expense',
   'add-income',
-  'income-received',
 ];
 
 describe('(app)/_layout', () => {

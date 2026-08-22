@@ -15,7 +15,8 @@ import {
   useMarkRecurringPaid,
   useUnmarkRecurringPaid,
 } from '../../src/api/recurringExpenseMutations';
-import type { RecurringExpense } from '../../src/api/types';
+import { useCreateTransaction, useDeleteTransaction } from '../../src/api/transactionMutations';
+import type { CategoryMonth, RecurringExpense } from '../../src/api/types';
 import { useAuth } from '../../src/auth/AuthContext';
 import { AddRow } from '../../src/components/AddRow';
 import { CategoryIcon } from '../../src/components/CategoryIcon';
@@ -24,7 +25,6 @@ import { RetryableError } from '../../src/components/RetryableError';
 import { SwipeableRow } from '../../src/components/SwipeableRow';
 import { Toast } from '../../src/components/Toast';
 import {
-  mostRecentDate,
   sumActualCents,
   sumAvailableBudgetedCents,
   sumRecurringCents,
@@ -111,6 +111,8 @@ export default function HomeScreen() {
 
   const markRecurringPaid = useMarkRecurringPaid();
   const unmarkRecurringPaid = useUnmarkRecurringPaid();
+  const createTransaction = useCreateTransaction();
+  const deleteTransaction = useDeleteTransaction();
 
   const currentMonthQuery = useCurrentMonth();
   const month = currentMonthQuery.data?.month;
@@ -177,6 +179,39 @@ export default function HomeScreen() {
           recurringExpenseId: re.id,
           amountCents: re.amountCents,
           date: todayIsoDate(),
+        });
+      }
+    } catch {
+      setToastMessage(GENERIC_ERROR_MESSAGE);
+    }
+  }
+
+  // Tapping an Income row toggles received state directly, both directions -- no separate
+  // screen. "Received" has no stored field (see docs/PLAN.md): derived the same way the row's
+  // own amount already is, actualAmountCents > 0. Not received -> received: a plain Transaction
+  // for the expected amount, dated today, direction server-derived as INCOME from the row's own
+  // (income-direction) category -- same mechanism as every other transaction in this app, just
+  // via useCreateTransaction directly rather than a dedicated recurring-style hook, since income
+  // has no separate entity to keep in sync (useDeleteTransaction already invalidates
+  // ['categoryMonths'], which is all "received" is derived from). Received -> not received:
+  // deletes every transaction linked to this CategoryMonth this month; allSettled (not all) so a
+  // partial failure still surfaces as an error instead of silently leaving some deleted.
+  async function handleToggleIncomeReceived(cm: CategoryMonth) {
+    const received = cm.actualAmountCents > 0;
+    try {
+      if (received) {
+        const results = await Promise.allSettled(
+          cm.transactions.map((t) => deleteTransaction.mutateAsync({ transactionId: t.id })),
+        );
+        if (results.some((r) => r.status === 'rejected')) {
+          setToastMessage(GENERIC_ERROR_MESSAGE);
+        }
+      } else {
+        await createTransaction.mutateAsync({
+          categoryMonthId: cm.id,
+          amountCents: cm.monthlyBudgetCents,
+          date: todayIsoDate(),
+          merchant: null,
         });
       }
     } catch {
@@ -294,7 +329,7 @@ export default function HomeScreen() {
     }
     // INCOME
     return (incomeCategoryMonths.data ?? []).map((cm) => {
-      const date = mostRecentDate(cm.transactions);
+      const received = cm.actualAmountCents > 0;
       return (
         <SwipeableRow
           key={`${cm.id}-${listResetKey}`}
@@ -317,26 +352,13 @@ export default function HomeScreen() {
         >
           <Pressable
             testID={`income-row-${cm.id}`}
-            onPress={() =>
-              router.push({
-                pathname: '/income-received',
-                params: {
-                  categoryMonthId: cm.id,
-                  name: cm.category.name,
-                  icon: cm.category.icon,
-                  color: cm.category.color,
-                  monthlyBudgetCents: String(cm.monthlyBudgetCents),
-                  actualAmountCents: String(cm.actualAmountCents),
-                  transactionIds: JSON.stringify(cm.transactions.map((t) => t.id)),
-                },
-              })
-            }
+            onPress={() => handleToggleIncomeReceived(cm)}
           >
             <ListRow
               icon={<CategoryIcon name={cm.category.icon} color={colors.text.primary} />}
               circleColor={cm.category.color}
               title={cm.category.name}
-              subtitle={date ? formatDate(date) : undefined}
+              subtitle={received ? 'Received' : 'Not received'}
               amountText={formatCents(cm.actualAmountCents)}
               secondaryAmountText={formatCents(cm.monthlyBudgetCents)}
             />

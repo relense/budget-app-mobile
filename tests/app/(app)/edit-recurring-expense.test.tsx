@@ -141,7 +141,7 @@ describe('EditRecurringExpenseScreen', () => {
     expect(screen.queryByTestId('due-day-value')).toBeNull();
   });
 
-  it('pressing the calendar key swaps the display to the pre-filled due date (day gray, fixed month/year black), same as Add Transaction -- the amount is no longer shown', async () => {
+  it('pressing the calendar key swaps the display to the pre-filled due date, same as Add Transaction -- the amount is no longer shown', async () => {
     await renderScreen();
 
     await fireEvent.press(screen.getByTestId('keypad-toggle-date'));
@@ -149,6 +149,27 @@ describe('EditRecurringExpenseScreen', () => {
     expect(screen.queryByTestId('calculator-value')).toBeNull();
     expect(screen.getByTestId('due-day-value').props.children).toBe('10');
     expect(screen.getByTestId('due-month-year-value').props.children).toBe(' Sep 2026');
+  });
+
+  it('shows the pre-filled day in black (it is a real value, not a placeholder), and switches to gray once cleared', async () => {
+    function flatten(style: unknown): Record<string, unknown>[] {
+      return ([] as unknown[]).concat(style).filter(Boolean) as Record<string, unknown>[];
+    }
+    function colorOf(testId: string) {
+      return flatten(screen.getByTestId(testId).props.style).find((s) => 'color' in s)?.color;
+    }
+
+    await renderScreen();
+    await fireEvent.press(screen.getByTestId('keypad-toggle-date'));
+
+    const monthYearColor = colorOf('due-month-year-value');
+    // The pre-filled "10" is real data, not a placeholder -- same (black) color as the always-
+    // black month/year.
+    expect(colorOf('due-day-value')).toBe(monthYearColor);
+
+    await fireEvent.press(screen.getByTestId('keypad-backspace'));
+
+    expect(colorOf('due-day-value')).not.toBe(monthYearColor);
   });
 
   it('toggling back to amount mode restores the amount display', async () => {
