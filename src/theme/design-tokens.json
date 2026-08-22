@@ -1,0 +1,193 @@
+{
+  "$note": "Extracted by eye from mockups/*.png (24 screens) on 2026-08-21. Close-enough approximations, not pixel-sampled hex values — refine by hand if exact matches matter. Device-frame chrome (the light-gray canvas the phone screenshots float on) is excluded; only in-app colors are captured. One runtime color, `identity.badgeBackground` in src/theme/colors.ts, has no entry here deliberately — it's a user-specified accent for the auth screens, not extracted from any mockup, so it doesn't belong in a 'from the mockups' reference file.",
+
+  "colors": {
+    "background": {
+      "screen": "#FFFFFF",
+      "headerAccent": "#CFF3DA",
+      "keypadKey": "#F0F0F0"
+    },
+    "text": {
+      "primary": "#1A1A1A",
+      "secondary": "#9B9B9B",
+      "placeholder": "#C6C6C6",
+      "onDark": "#FFFFFF"
+    },
+    "category": {
+      "$note": "Icon/background color pairs observed across categories, income sources, and savings funds — the same small palette is reused across all three (e.g. 'green' backs both the Shopping category and the Emergency Fund savings fund). Icon glyph itself is chosen separately from color. See screens.createOrEditAmountEntry note re: whether users pick this or it's auto-assigned — still an open question.",
+      "green": { "background": "#CFF3DA", "icon": "#234D2E" },
+      "pink": { "background": "#F7D6DE", "icon": "#A24F63" },
+      "purple": { "background": "#E7DAF5", "icon": "#7A5AA8" },
+      "blue": { "background": "#D8E7F7", "icon": "#3E6FA6" },
+      "peach": { "background": "#F6DECB", "icon": "#B97A4C" },
+      "teal": { "background": "#D6F1EC", "icon": "#327E71" }
+    },
+    "status": {
+      "paid": { "background": "#CFF3DA", "text": "#1A1A1A" },
+      "unpaid": { "background": "#E2E2E2", "text": "#6E6E6E" }
+    },
+    "segment": {
+      "track": "#EDEDED",
+      "active": "#131313",
+      "activeText": "#FFFFFF",
+      "inactiveText": "#8C8C8C"
+    },
+    "keypad": {
+      "digitBackground": "#F0F0F0",
+      "digitText": "#1A1A1A",
+      "deleteKeyBackground": "#F7C9CF",
+      "toggleKeyBackground": "#CFF3DA",
+      "currencyKeyBackground": "#F5E27A",
+      "confirmKeyBackground": "#131313",
+      "confirmIcon": "#FFFFFF"
+    },
+    "pill": {
+      "textInputBackground": "#D9E4FA",
+      "movementTypeBackground": "#F0DFF5"
+    },
+    "button": {
+      "deleteBackground": "#F2705C",
+      "deleteText": "#FFFFFF"
+    },
+    "navigation": {
+      "activeIcon": "#2F80ED",
+      "inactiveIcon": "#1A1A1A",
+      "background": "#FFFFFF"
+    }
+  },
+
+  "typography": {
+    "fontFamily": {
+      "$note": "Approximate: a rounded geometric sans-serif, visually close to SF Pro Rounded / Poppins / Nunito. Exact family not identifiable from screenshots alone — pick one and refine by hand.",
+      "base": "System"
+    },
+    "scale": {
+      "displayAmount": {
+        "size": 34,
+        "weight": "700",
+        "$usage": "big keypad number, header total balance"
+      },
+      "headerStat": {
+        "size": 15,
+        "weight": "700",
+        "$usage": "Total Budgeted / Available / Spent stat row"
+      },
+      "screenTitle": { "size": 17, "weight": "600", "$usage": "category/fund detail header title" },
+      "listTitle": { "size": 16, "weight": "600", "$usage": "category/transaction/fund row title" },
+      "listAmount": { "size": 16, "weight": "600", "$usage": "row amount, right-aligned" },
+      "listSubtitle": {
+        "size": 12,
+        "weight": "400",
+        "color": "text.secondary",
+        "$usage": "row date/status/percentage"
+      },
+      "segmentLabel": {
+        "size": 13,
+        "weight": "500",
+        "$usage": "Available/Expenses/Recurrent/Income tab labels"
+      },
+      "placeholder": {
+        "size": 14,
+        "weight": "400",
+        "color": "text.placeholder",
+        "$usage": "'Add description...', 'dd/mm/yyyy'"
+      },
+      "keypadDigit": { "size": 24, "weight": "500" },
+      "buttonLabel": { "size": 15, "weight": "600", "$usage": "'Delete' pill button" }
+    }
+  },
+
+  "screens": {
+    "budgetHome": {
+      "description": "Root budget tab: Available / Expenses / Recurrent / Income segmented control over a category (or bill, or income source) list. Reached via the 2nd bottom-nav icon.",
+      "sourceFiles": [
+        "Available Budgeted - Home Available.png",
+        "Home Total Available.png",
+        "Available Budgeted - Home Expenses.png",
+        "Available Budgeted - Home Available(1).png",
+        "Available Budgeted - Home Available(2).png"
+      ],
+      "tokens": [
+        "colors.background.screen",
+        "colors.segment.*",
+        "colors.category.*",
+        "colors.status.*",
+        "colors.text.primary",
+        "colors.text.secondary",
+        "colors.navigation.*",
+        "typography.scale.listTitle",
+        "typography.scale.listAmount",
+        "typography.scale.listSubtitle",
+        "typography.scale.segmentLabel",
+        "typography.scale.headerStat"
+      ]
+    },
+    "savingsFundsList": {
+      "description": "Savings funds list (Total Savings dropdown + fund rows with In Progress/Completed status). Reached via the 4th bottom-nav icon, no segmented control.",
+      "sourceFiles": ["Available Budgeted - Home Available(3).png"],
+      "tokens": [
+        "colors.background.screen",
+        "colors.category.*",
+        "colors.text.primary",
+        "colors.text.secondary",
+        "typography.scale.listTitle",
+        "typography.scale.listAmount",
+        "typography.scale.listSubtitle"
+      ]
+    },
+    "categoryDetail": {
+      "description": "Drill-down into one category or fund: mint-green header banner (back / title+month dropdown / edit / add) over 3 stat columns, then a plain-white transaction/movement list below. Shared layout for expense categories and savings funds.",
+      "sourceFiles": [
+        "Month Pressed.png",
+        "Shopping Details.png",
+        "Shopping Details(1).png",
+        "Shopping budget pressed.png"
+      ],
+      "tokens": [
+        "colors.background.headerAccent",
+        "colors.background.screen",
+        "colors.text.primary",
+        "colors.text.secondary",
+        "colors.category.green",
+        "typography.scale.screenTitle",
+        "typography.scale.headerStat",
+        "typography.scale.listTitle",
+        "typography.scale.listSubtitle",
+        "typography.scale.listAmount"
+      ]
+    },
+    "createOrEditAmountEntry": {
+      "description": "Shared numeric-keypad UI for entering a budget amount, a transaction, a recurring-expense payment, or a savings movement — and its date-entry sub-mode (calendar-toggle key swaps the digit display to dd/mm/yyyy). A category/context pill sits above the amount; a second pill (Deposit/Withdraw) appears for savings movements; a red 'Delete' pill appears only when editing an existing entry.",
+      "sourceFiles": [
+        "Create a new Available Item.png",
+        "Shopping Add icon pressed.png",
+        "Shopping Add icon pressed(1).png",
+        "Shopping Add icon pressed(2).png",
+        "Shopping Add icon pressed(3).png",
+        "Shopping calendar pressed.png",
+        "Shopping calendar pressed(1).png",
+        "Shopping pressed expense.png",
+        "Shopping pressed expense(1).png",
+        "Shopping pressed expense(2).png",
+        "Shopping pressed expense(3).png",
+        "Shopping pressed expense(4).png",
+        "Savings add new fund.png",
+        "Savings fund Edit.png"
+      ],
+      "tokens": [
+        "colors.background.screen",
+        "colors.keypad.*",
+        "colors.pill.*",
+        "colors.category.*",
+        "colors.status.*",
+        "colors.button.deleteBackground",
+        "colors.button.deleteText",
+        "colors.text.placeholder",
+        "typography.scale.displayAmount",
+        "typography.scale.keypadDigit",
+        "typography.scale.placeholder",
+        "typography.scale.buttonLabel"
+      ]
+    }
+  }
+}
