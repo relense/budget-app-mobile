@@ -27,6 +27,12 @@ import {
   appendDigit,
   backspaceAmount,
 } from '../../src/lib/amountInput';
+import {
+  appendDueDayDigit,
+  backspaceDueDay,
+  formatTypedDueDay,
+  isValidDueDay,
+} from '../../src/lib/dueDayInput';
 import { useTheme } from '../../src/theme/ThemeProvider';
 
 // Need/Want only -- backend rejects 'savings' for a recurring expense (see docs/PLAN.md).
@@ -35,7 +41,7 @@ const BUDGET_TYPES: { key: Extract<BudgetType, 'NEED' | 'WANT'>; label: string }
   { key: 'WANT', label: 'Want' },
 ];
 
-const MAX_DUE_DAY = 31;
+const DUE_DAY_PLACEHOLDER = 'Due date day';
 const CATALOG_LOAD_ERROR = "Couldn't load your budget categories.";
 const GENERIC_ERROR_MESSAGE = 'Something went wrong. Please try again.';
 
@@ -58,9 +64,19 @@ export default function AddRecurringExpenseScreen() {
 
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
   const [name, setName] = useState('');
-  const [dueDayText, setDueDayText] = useState('');
+  // Same split as add-transaction.tsx's date entry: `committedDueDay` is the last value the
+  // user actually landed on, `dueDayDigits` is a scratch buffer that resets to '' every time
+  // day-entry mode is (re-)entered, so the first digit typed always starts fresh instead of
+  // appending onto whatever was there before -- the display falls back to `committedDueDay`
+  // only while the buffer is still empty.
+  const [committedDueDay, setCommittedDueDay] = useState('');
+  const [dueDayDigits, setDueDayDigits] = useState('');
   const [budgetType, setBudgetType] = useState<BudgetType>('NEED');
   const [amountText, setAmountText] = useState('');
+  // Whether the shared keypad is in day-entry mode (its calendar-toggle key) instead of
+  // amount-entry -- same mechanism add-transaction.tsx uses for its date, see AmountKeypad's
+  // dateMode/onToggleDateMode props.
+  const [dateMode, setDateMode] = useState(false);
   const [overlay, setOverlay] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
 
@@ -80,21 +96,46 @@ export default function AddRecurringExpenseScreen() {
   const selectedCategory: Category | null =
     expenseCategories.find((c) => c.id === selectedCategoryId) ?? expenseCategories[0] ?? null;
 
-  const dueDay = dueDayText === '' ? null : Number(dueDayText);
-  const isDueDayValid = dueDay !== null && dueDay >= 1 && dueDay <= MAX_DUE_DAY;
+  // Whatever's currently displayed/would be submitted for the due day: the live buffer while
+  // something's been typed this time in date mode, otherwise the last committed value.
+  const dueDayDisplayDigits = dueDayDigits === '' ? committedDueDay : dueDayDigits;
+  const dueDay = isValidDueDay(dueDayDisplayDigits) ? Number(dueDayDisplayDigits) : null;
 
   const canSubmit =
     catalogReady &&
     !createRecurringExpense.isPending &&
     !!selectedCategory &&
     name.trim().length > 0 &&
-    isDueDayValid &&
+    dueDay !== null &&
     amountTextToCents(amountText) > 0;
 
-  function handleDueDayChange(text: string) {
-    const digitsOnly = text.replace(/[^0-9]/g, '').slice(0, 2);
-    if (digitsOnly !== '' && Number(digitsOnly) > MAX_DUE_DAY) return;
-    setDueDayText(digitsOnly);
+  function handleDigit(digit: string) {
+    if (dateMode) {
+      setDueDayDigits((digits) => appendDueDayDigit(digits, digit));
+    } else {
+      setAmountText((text) => appendDigit(text, digit));
+    }
+  }
+
+  function handleDecimalPoint() {
+    if (dateMode) return; // a due day has no decimal segment
+    setAmountText((text) => appendDecimalPoint(text));
+  }
+
+  function handleBackspace() {
+    if (dateMode) {
+      setDueDayDigits((digits) => backspaceDueDay(digits));
+    } else {
+      setAmountText((text) => backspaceAmount(text));
+    }
+  }
+
+  function handleToggleDateMode() {
+    if (dateMode && dueDayDigits !== '') {
+      setCommittedDueDay(dueDayDigits);
+    }
+    setDueDayDigits('');
+    setDateMode((current) => !current);
   }
 
   async function handleConfirm() {
@@ -171,9 +212,7 @@ export default function AddRecurringExpenseScreen() {
         <View style={[styles.grabber, { backgroundColor: colors.segment.track }]} />
       </View>
 
-      <ScrollView
-        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 16 }]}
-      >
+      <View style={[styles.content, { paddingBottom: insets.bottom + 16 }]}>
         <View style={styles.identityRow}>
           <Pressable
             testID="category-pill"
@@ -223,25 +262,6 @@ export default function AddRecurringExpenseScreen() {
           ))}
         </View>
 
-        <View style={styles.dueDayRow}>
-          <Text style={[typography.scale.listSubtitle, { color: colors.text.secondary }]}>
-            Due day
-          </Text>
-          <TextInput
-            testID="due-day-input"
-            style={[
-              styles.dueDayInput,
-              { backgroundColor: colors.pill.textInputBackground, color: colors.text.primary },
-            ]}
-            keyboardType="number-pad"
-            placeholder="1-31"
-            placeholderTextColor={colors.text.secondary}
-            value={dueDayText}
-            onChangeText={handleDueDayChange}
-            maxLength={2}
-          />
-        </View>
-
         <Text
           style={[
             typography.scale.listSubtitle,
@@ -249,12 +269,29 @@ export default function AddRecurringExpenseScreen() {
             { color: colors.text.secondary },
           ]}
         >
-          Amount
+          {dateMode ? 'Due day' : 'Amount'}
         </Text>
         <Text style={styles.amountRow}>
-          <Text style={[styles.currencyPrefix, { color: colors.text.secondary }]}>€</Text>
-          <Text style={[typography.scale.calculatorAmount, { color: colors.text.primary }]}>
-            {amountText || '0'}
+          {dateMode ? null : (
+            <Text style={[styles.currencyPrefix, { color: colors.text.secondary }]}>€</Text>
+          )}
+          <Text
+            testID="calculator-value"
+            style={[
+              typography.scale.calculatorAmount,
+              {
+                color:
+                  dateMode && dueDayDisplayDigits === ''
+                    ? colors.text.placeholder
+                    : colors.text.primary,
+              },
+            ]}
+          >
+            {dateMode
+              ? dueDayDisplayDigits === ''
+                ? DUE_DAY_PLACEHOLDER
+                : formatTypedDueDay(dueDayDisplayDigits)
+              : amountText || '0'}
           </Text>
         </Text>
 
@@ -266,14 +303,16 @@ export default function AddRecurringExpenseScreen() {
 
         <View style={styles.keypadWrap}>
           <AmountKeypad
-            onDigit={(digit) => setAmountText((text) => appendDigit(text, digit))}
-            onDecimalPoint={() => setAmountText((text) => appendDecimalPoint(text))}
-            onBackspace={() => setAmountText((text) => backspaceAmount(text))}
+            onDigit={handleDigit}
+            onDecimalPoint={handleDecimalPoint}
+            onBackspace={handleBackspace}
             onConfirm={handleConfirm}
             confirmDisabled={!canSubmit}
+            dateMode={dateMode}
+            onToggleDateMode={handleToggleDateMode}
           />
         </View>
-      </ScrollView>
+      </View>
 
       {overlay ? (
         <>
@@ -335,7 +374,7 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
   content: {
-    flexGrow: 1,
+    flex: 1,
     paddingHorizontal: 24,
     paddingTop: 16,
     paddingBottom: 16,
@@ -373,19 +412,6 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     alignItems: 'center',
   },
-  dueDayRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  dueDayInput: {
-    width: 72,
-    height: 40,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    textAlign: 'center',
-    fontSize: 16,
-  },
   amountLabel: {
     textAlign: 'center',
     marginTop: 4,
@@ -404,7 +430,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   keypadWrap: {
-    minHeight: 260,
+    flex: 1,
   },
   overlayBackdrop: {
     zIndex: 9,

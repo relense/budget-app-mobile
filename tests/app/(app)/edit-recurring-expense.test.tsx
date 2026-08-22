@@ -111,12 +111,22 @@ beforeEach(() => {
 });
 
 describe('EditRecurringExpenseScreen', () => {
-  it('pre-fills name, amount, and due day from route params', async () => {
+  it('pre-fills name and amount from route params, and shows the pre-filled due day once toggled into day-entry mode', async () => {
     await renderScreen();
 
     expect(screen.getByTestId('recurring-name-input').props.value).toBe('Water');
-    expect(screen.getByTestId('due-day-input').props.value).toBe('10');
     expect(screen.getByText('21.96')).toBeTruthy();
+
+    await fireEvent.press(screen.getByTestId('keypad-toggle-date'));
+
+    expect(screen.getByTestId('calculator-value').props.children).toBe('10');
+  });
+
+  it('uses the same shared AmountKeypad as Add Category', async () => {
+    await renderScreen();
+
+    expect(screen.getByText('Amount')).toBeTruthy();
+    expect(screen.getByTestId('keypad-toggle-date')).toBeTruthy();
   });
 
   it('shows Unpaid when paidThisMonth is false', async () => {
@@ -184,10 +194,15 @@ describe('EditRecurringExpenseScreen', () => {
     await fireEvent.press(screen.getByTestId('category-pill'));
     await fireEvent.press(screen.getByTestId('existing-category-c-housing'));
     await fireEvent.press(screen.getByTestId('budget-type-WANT'));
-    await fireEvent.changeText(screen.getByTestId('due-day-input'), '5');
-    // The first keypad press clears the whole pre-filled amount and starts fresh (same "start
-    // fresh on the first press" rule as edit-category.tsx), so this ends up typing "50" from
-    // scratch -> 5000 cents, not 21.96 with a 5 and a 0 appended.
+    // Toggling into day-entry mode resets the typed buffer, so the very first digit pressed
+    // replaces the pre-filled "10" outright (same "start fresh on the first press" rule as
+    // edit-category.tsx's amount field), landing on due day 5, not 105.
+    await fireEvent.press(screen.getByTestId('keypad-toggle-date'));
+    await fireEvent.press(screen.getByTestId('keypad-digit-5'));
+    await fireEvent.press(screen.getByTestId('keypad-toggle-date'));
+    // The first keypad press (now back in amount mode) clears the whole pre-filled amount and
+    // starts fresh, so this ends up typing "50" from scratch -> 5000 cents, not 21.96 with a 5
+    // and a 0 appended.
     await fireEvent.press(screen.getByTestId('keypad-digit-5'));
     await fireEvent.press(screen.getByTestId('keypad-digit-0'));
 
@@ -207,7 +222,9 @@ describe('EditRecurringExpenseScreen', () => {
   it('rejects a due day of 0 -- confirm stays disabled', async () => {
     await renderScreen();
 
-    await fireEvent.changeText(screen.getByTestId('due-day-input'), '0');
+    await fireEvent.press(screen.getByTestId('keypad-toggle-date'));
+    await fireEvent.press(screen.getByTestId('keypad-digit-0'));
+    await fireEvent.press(screen.getByTestId('keypad-toggle-date'));
 
     expect(screen.getByTestId('keypad-confirm').props.accessibilityState?.disabled).toBe(true);
   });
@@ -215,10 +232,31 @@ describe('EditRecurringExpenseScreen', () => {
   it('rejects a second due-day digit that would push the value past 31', async () => {
     await renderScreen();
 
-    await fireEvent.changeText(screen.getByTestId('due-day-input'), '3');
-    await fireEvent.changeText(screen.getByTestId('due-day-input'), '32');
+    await fireEvent.press(screen.getByTestId('keypad-toggle-date'));
+    await fireEvent.press(screen.getByTestId('keypad-digit-3'));
+    await fireEvent.press(screen.getByTestId('keypad-digit-2'));
 
-    expect(screen.getByTestId('due-day-input').props.value).toBe('3');
+    expect(screen.getByTestId('calculator-value').props.children).toBe('3');
+  });
+
+  it('backspacing while showing the pre-filled due day (nothing typed yet this session) is a no-op, not a partial delete of the old value', async () => {
+    await renderScreen();
+
+    await fireEvent.press(screen.getByTestId('keypad-toggle-date'));
+    await fireEvent.press(screen.getByTestId('keypad-backspace'));
+
+    expect(screen.getByTestId('calculator-value').props.children).toBe('10');
+  });
+
+  it('re-entering day-entry mode after typing (without confirming) shows what was typed, not the original pre-filled value', async () => {
+    await renderScreen();
+
+    await fireEvent.press(screen.getByTestId('keypad-toggle-date'));
+    await fireEvent.press(screen.getByTestId('keypad-digit-7'));
+    await fireEvent.press(screen.getByTestId('keypad-toggle-date'));
+    await fireEvent.press(screen.getByTestId('keypad-toggle-date'));
+
+    expect(screen.getByTestId('calculator-value').props.children).toBe('7');
   });
 
   it('shows a hint toast instead of the delete confirm when Delete is pressed while Paid (blocked server-side)', async () => {

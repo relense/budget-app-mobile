@@ -33,6 +33,12 @@ import {
   backspaceAmount,
   centsToAmountText,
 } from '../../src/lib/amountInput';
+import {
+  appendDueDayDigit,
+  backspaceDueDay,
+  formatTypedDueDay,
+  isValidDueDay,
+} from '../../src/lib/dueDayInput';
 import { todayIsoDate } from '../../src/lib/today';
 import { useTheme } from '../../src/theme/ThemeProvider';
 
@@ -41,7 +47,7 @@ const BUDGET_TYPES: { key: Extract<BudgetType, 'NEED' | 'WANT'>; label: string }
   { key: 'WANT', label: 'Want' },
 ];
 
-const MAX_DUE_DAY = 31;
+const DUE_DAY_PLACEHOLDER = 'Due date day';
 const TOAST_DURATION_MS = 2500;
 const GENERIC_ERROR_MESSAGE = 'Something went wrong. Please try again.';
 
@@ -89,13 +95,22 @@ export default function EditRecurringExpenseScreen() {
   const [budgetType, setBudgetType] = useState<Extract<BudgetType, 'NEED' | 'WANT'>>(
     params.budgetType === 'WANT' ? 'WANT' : 'NEED',
   );
-  const [dueDayText, setDueDayText] = useState(params.dueDay);
+  // Same split as add-recurring-expense.tsx/add-transaction.tsx's date entry: `committedDueDay`
+  // is the last value actually landed on (pre-filled from params here), `dueDayDigits` is a
+  // scratch buffer that resets to '' every time day-entry mode is (re-)entered, so the first
+  // digit typed always starts fresh instead of appending onto the pre-filled value -- the
+  // display falls back to `committedDueDay` only while the buffer is still empty.
+  const [committedDueDay, setCommittedDueDay] = useState(params.dueDay);
+  const [dueDayDigits, setDueDayDigits] = useState('');
   const [amountText, setAmountText] = useState(() => centsToAmountText(Number(params.amountCents)));
   // Same "first key clears the pre-filled value" guard as edit-category.tsx -- the pre-filled
   // amount always has 2 decimal digits already, which appendDigit/appendDecimalPoint treat as
   // "already complete" and refuse to extend.
   const [hasEditedAmount, setHasEditedAmount] = useState(false);
   const [paid, setPaid] = useState(params.paidThisMonth === 'true');
+  // Whether the shared keypad is in day-entry mode (its calendar-toggle key) instead of
+  // amount-entry -- same mechanism add-transaction.tsx uses for its date.
+  const [dateMode, setDateMode] = useState(false);
   const [overlay, setOverlay] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -115,8 +130,8 @@ export default function EditRecurringExpenseScreen() {
     return () => clearTimeout(timer);
   }, [toastMessage]);
 
-  const dueDay = dueDayText === '' ? null : Number(dueDayText);
-  const isDueDayValid = dueDay !== null && dueDay >= 1 && dueDay <= MAX_DUE_DAY;
+  const dueDayDisplayDigits = dueDayDigits === '' ? committedDueDay : dueDayDigits;
+  const dueDay = isValidDueDay(dueDayDisplayDigits) ? Number(dueDayDisplayDigits) : null;
   const isMutating =
     updateRecurringExpense.isPending ||
     markRecurringPaid.isPending ||
@@ -124,9 +139,13 @@ export default function EditRecurringExpenseScreen() {
     removeFromMonth.isPending;
 
   const canSubmit =
-    !isMutating && name.trim().length > 0 && isDueDayValid && amountTextToCents(amountText) > 0;
+    !isMutating && name.trim().length > 0 && dueDay !== null && amountTextToCents(amountText) > 0;
 
   function handleDigit(digit: string) {
+    if (dateMode) {
+      setDueDayDigits((digits) => appendDueDayDigit(digits, digit));
+      return;
+    }
     if (!hasEditedAmount) {
       setHasEditedAmount(true);
       setAmountText(digit === '0' ? '0' : digit);
@@ -136,6 +155,7 @@ export default function EditRecurringExpenseScreen() {
   }
 
   function handleDecimalPoint() {
+    if (dateMode) return; // a due day has no decimal segment
     if (!hasEditedAmount) {
       setHasEditedAmount(true);
       setAmountText('0.');
@@ -145,6 +165,10 @@ export default function EditRecurringExpenseScreen() {
   }
 
   function handleBackspace() {
+    if (dateMode) {
+      setDueDayDigits((digits) => backspaceDueDay(digits));
+      return;
+    }
     if (!hasEditedAmount) {
       setHasEditedAmount(true);
       setAmountText('');
@@ -153,10 +177,12 @@ export default function EditRecurringExpenseScreen() {
     setAmountText((text) => backspaceAmount(text));
   }
 
-  function handleDueDayChange(text: string) {
-    const digitsOnly = text.replace(/[^0-9]/g, '').slice(0, 2);
-    if (digitsOnly !== '' && Number(digitsOnly) > MAX_DUE_DAY) return;
-    setDueDayText(digitsOnly);
+  function handleToggleDateMode() {
+    if (dateMode && dueDayDigits !== '') {
+      setCommittedDueDay(dueDayDigits);
+    }
+    setDueDayDigits('');
+    setDateMode((current) => !current);
   }
 
   async function handleTogglePaid() {
@@ -240,7 +266,7 @@ export default function EditRecurringExpenseScreen() {
         <View style={[styles.grabber, { backgroundColor: colors.segment.track }]} />
       </View>
 
-      <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 16 }]}>
+      <View style={[styles.content, { paddingBottom: insets.bottom + 16 }]}>
         <Pressable
           testID="paid-pill"
           style={[
@@ -310,27 +336,30 @@ export default function EditRecurringExpenseScreen() {
           ))}
         </View>
 
-        <View style={styles.dueDayRow}>
-          <Text style={[typography.scale.listSubtitle, { color: colors.text.secondary }]}>
-            Due day
-          </Text>
-          <TextInput
-            testID="due-day-input"
-            style={[
-              styles.dueDayInput,
-              { backgroundColor: colors.pill.textInputBackground, color: colors.text.primary },
-            ]}
-            keyboardType="number-pad"
-            value={dueDayText}
-            onChangeText={handleDueDayChange}
-            maxLength={2}
-          />
-        </View>
-
+        <Text style={[typography.scale.listSubtitle, styles.amountLabel, { color: colors.text.secondary }]}>
+          {dateMode ? 'Due day' : 'Amount'}
+        </Text>
         <Text style={styles.amountRow}>
-          <Text style={[styles.currencyPrefix, { color: colors.text.secondary }]}>€</Text>
-          <Text style={[typography.scale.calculatorAmount, { color: colors.text.primary }]}>
-            {amountText || '0'}
+          {dateMode ? null : (
+            <Text style={[styles.currencyPrefix, { color: colors.text.secondary }]}>€</Text>
+          )}
+          <Text
+            testID="calculator-value"
+            style={[
+              typography.scale.calculatorAmount,
+              {
+                color:
+                  dateMode && dueDayDisplayDigits === ''
+                    ? colors.text.placeholder
+                    : colors.text.primary,
+              },
+            ]}
+          >
+            {dateMode
+              ? dueDayDisplayDigits === ''
+                ? DUE_DAY_PLACEHOLDER
+                : formatTypedDueDay(dueDayDisplayDigits)
+              : amountText || '0'}
           </Text>
         </Text>
 
@@ -341,6 +370,8 @@ export default function EditRecurringExpenseScreen() {
             onBackspace={handleBackspace}
             onConfirm={handleConfirm}
             confirmDisabled={!canSubmit}
+            dateMode={dateMode}
+            onToggleDateMode={handleToggleDateMode}
           />
         </View>
 
@@ -355,7 +386,7 @@ export default function EditRecurringExpenseScreen() {
           <MaterialCommunityIcons name="trash-can-outline" size={18} color={colors.text.onDark} />
           <Text style={[styles.deleteLabel, { color: colors.text.onDark }]}>Delete</Text>
         </Pressable>
-      </ScrollView>
+      </View>
 
       {overlay ? (
         <>
@@ -414,7 +445,7 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
   content: {
-    flexGrow: 1,
+    flex: 1,
     paddingHorizontal: 24,
     paddingTop: 16,
     paddingBottom: 16,
@@ -461,22 +492,12 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     alignItems: 'center',
   },
-  dueDayRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  dueDayInput: {
-    width: 72,
-    height: 40,
-    borderRadius: 8,
-    paddingHorizontal: 12,
+  amountLabel: {
     textAlign: 'center',
-    fontSize: 16,
+    marginTop: 4,
   },
   amountRow: {
     textAlign: 'center',
-    marginTop: 4,
     marginBottom: 8,
   },
   currencyPrefix: {
@@ -484,7 +505,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Fredoka_400Regular',
   },
   keypadWrap: {
-    minHeight: 260,
+    flex: 1,
   },
   deleteButton: {
     flexDirection: 'row',

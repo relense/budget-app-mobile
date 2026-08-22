@@ -145,6 +145,24 @@ describe('AddRecurringExpenseScreen', () => {
     expect(screen.queryByTestId('category-picker-backdrop')).toBeNull();
   });
 
+  it('uses the same shared AmountKeypad as Add Category -- toggling the calendar key switches the display to day-entry, showing a placeholder until a digit is typed', async () => {
+    await renderScreen();
+
+    expect(screen.getByText('Amount')).toBeTruthy();
+    expect(screen.getByTestId('calculator-value').props.children).toBe('0');
+
+    await fireEvent.press(screen.getByTestId('keypad-toggle-date'));
+
+    expect(screen.getByText('Due day')).toBeTruthy();
+    expect(screen.getByText('Due date day')).toBeTruthy();
+
+    await fireEvent.press(screen.getByTestId('keypad-digit-1'));
+    await fireEvent.press(screen.getByTestId('keypad-digit-0'));
+
+    expect(screen.getByTestId('calculator-value').props.children).toBe('10');
+    expect(screen.queryByText('Due date day')).toBeNull();
+  });
+
   it('keeps confirm disabled until name, a valid due day, and a positive amount are all set', async () => {
     await renderScreen();
 
@@ -153,7 +171,10 @@ describe('AddRecurringExpenseScreen', () => {
     await fireEvent.changeText(screen.getByTestId('recurring-name-input'), 'Water');
     expect(screen.getByTestId('keypad-confirm').props.accessibilityState?.disabled).toBe(true);
 
-    await fireEvent.changeText(screen.getByTestId('due-day-input'), '10');
+    await fireEvent.press(screen.getByTestId('keypad-toggle-date'));
+    await fireEvent.press(screen.getByTestId('keypad-digit-1'));
+    await fireEvent.press(screen.getByTestId('keypad-digit-0'));
+    await fireEvent.press(screen.getByTestId('keypad-toggle-date'));
     expect(screen.getByTestId('keypad-confirm').props.accessibilityState?.disabled).toBe(true);
 
     await fireEvent.press(screen.getByTestId('keypad-digit-5'));
@@ -164,7 +185,9 @@ describe('AddRecurringExpenseScreen', () => {
     await renderScreen();
 
     await fireEvent.changeText(screen.getByTestId('recurring-name-input'), 'Water');
-    await fireEvent.changeText(screen.getByTestId('due-day-input'), '0');
+    await fireEvent.press(screen.getByTestId('keypad-toggle-date'));
+    await fireEvent.press(screen.getByTestId('keypad-digit-0'));
+    await fireEvent.press(screen.getByTestId('keypad-toggle-date'));
     await fireEvent.press(screen.getByTestId('keypad-digit-5'));
 
     expect(screen.getByTestId('keypad-confirm').props.accessibilityState?.disabled).toBe(true);
@@ -173,12 +196,22 @@ describe('AddRecurringExpenseScreen', () => {
   it('rejects a second due-day digit that would push the value past 31', async () => {
     await renderScreen();
 
-    // onChangeText fires with the whole field value after each keystroke, same as a real
-    // device typing one digit at a time -- '3' then '32'.
-    await fireEvent.changeText(screen.getByTestId('due-day-input'), '3');
-    await fireEvent.changeText(screen.getByTestId('due-day-input'), '32');
+    await fireEvent.press(screen.getByTestId('keypad-toggle-date'));
+    await fireEvent.press(screen.getByTestId('keypad-digit-3'));
+    await fireEvent.press(screen.getByTestId('keypad-digit-2'));
 
-    expect(screen.getByTestId('due-day-input').props.value).toBe('3');
+    expect(screen.getByTestId('calculator-value').props.children).toBe('3');
+  });
+
+  it('the decimal-point key is a no-op while in day-entry mode', async () => {
+    await renderScreen();
+
+    await fireEvent.press(screen.getByTestId('keypad-toggle-date'));
+    await fireEvent.press(screen.getByTestId('keypad-digit-1'));
+    await fireEvent.press(screen.getByTestId('keypad-decimal-point'));
+    await fireEvent.press(screen.getByTestId('keypad-digit-0'));
+
+    expect(screen.getByTestId('calculator-value').props.children).toBe('10');
   });
 
   it('defaults to Need selected, and switches the highlighted button on tap', async () => {
@@ -217,7 +250,10 @@ describe('AddRecurringExpenseScreen', () => {
     await renderScreen();
 
     await fireEvent.changeText(screen.getByTestId('recurring-name-input'), 'Water');
-    await fireEvent.changeText(screen.getByTestId('due-day-input'), '10');
+    await fireEvent.press(screen.getByTestId('keypad-toggle-date'));
+    await fireEvent.press(screen.getByTestId('keypad-digit-1'));
+    await fireEvent.press(screen.getByTestId('keypad-digit-0'));
+    await fireEvent.press(screen.getByTestId('keypad-toggle-date'));
     await fireEvent.press(screen.getByTestId('budget-type-WANT'));
     await fireEvent.press(screen.getByTestId('keypad-digit-5'));
     await fireEvent.press(screen.getByTestId('keypad-decimal-point'));
@@ -247,7 +283,10 @@ describe('AddRecurringExpenseScreen', () => {
 
     await renderScreen();
     await fireEvent.changeText(screen.getByTestId('recurring-name-input'), 'Water');
-    await fireEvent.changeText(screen.getByTestId('due-day-input'), '10');
+    await fireEvent.press(screen.getByTestId('keypad-toggle-date'));
+    await fireEvent.press(screen.getByTestId('keypad-digit-1'));
+    await fireEvent.press(screen.getByTestId('keypad-digit-0'));
+    await fireEvent.press(screen.getByTestId('keypad-toggle-date'));
     await fireEvent.press(screen.getByTestId('keypad-digit-5'));
     await fireEvent.press(screen.getByTestId('keypad-confirm'));
 

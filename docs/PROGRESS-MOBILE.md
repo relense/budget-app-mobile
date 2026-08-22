@@ -507,6 +507,57 @@ default.
         `IconPicker.tsx` gained an optional `palette` prop defaulting to
         the expense palette, so `add-category.tsx`'s call site needed no
         change. 349 tests total across 40 suites.
+- [x] `pr-reviewer` + `test-auditor` pass on the Recurrent/Income branch
+      above, and fixes for both. **pr-reviewer**: one blocking bug — the
+      Recurrent tab's "unmark paid" action (a loop of `useDeleteTransaction`
+      calls) never invalidated `['recurringExpenses']`, so after
+      successfully unmarking a bill the Home screen kept showing it as
+      "Paid" with stale transaction ids until something else happened to
+      invalidate that query. Fixed with a new
+      `useUnmarkRecurringPaid` hook (mirrors `useMarkRecurringPaid`'s
+      invalidation set). Also hardened both the recurring-unmark and
+      income-clear-received delete loops from `Promise.all` to
+      `Promise.allSettled` — a partial failure (some transactions deleted,
+      some not) now surfaces as an error and skips navigating away instead
+      of silently claiming success — and added a client-side guard on
+      Edit Recurring Expense's Delete button, since the backend blocks
+      `removeRecurringExpenseFromMonth` while any transaction references
+      the row (true for anything currently Paid); it now shows "Mark as
+      unpaid before deleting" instead of a doomed request's generic error.
+      **test-auditor**: two real gaps — the multi-row id-mapping in
+      `index.tsx` (`transactions.map(t => t.id)` per row) was only ever
+      exercised by single-row fixtures, so a wrong-row-mapping regression
+      couldn't have been caught; fixed by adding a second Recurrent and
+      Income row to `index.test.tsx`'s fixtures, each with distinct ids.
+      The due-day lower bound (0) was untested everywhere, and
+      Edit Recurring Expense had no due-day boundary tests at all; both
+      fixed. 364 tests total across 40 suites.
+- [x] Two follow-up fixes from direct user feedback on the running app,
+      both on Add/Edit Recurring Expense: (1) their amount keypad looked
+      different from Add/Edit Category's — traced to the container being a
+      `ScrollView` with `keypadWrap: { minHeight: 260 }` instead of a plain
+      `View` with `keypadWrap: { flex: 1 }` (the category screens'
+      pattern), needed at the time because the separate due-day row (see
+      next point) made the form taller. Once that row was removed, both
+      screens switched back to the exact same `View`/`flex: 1` structure
+      as `add-category.tsx`/`edit-category.tsx`. (2) Due day was a plain
+      numeric `TextInput` row; the user asked for it to reuse the shared
+      `AmountKeypad`'s calendar-toggle key instead (the same mechanism
+      `add-transaction.tsx` already uses for its date), with a "Due date
+      day" placeholder. New `src/lib/dueDayInput.ts` mirrors
+      `dateInput.ts`'s day-only helpers but deliberately has **no
+      month/calendar context** — `RecurringExpense.dueDay` is a bare Int,
+      1-31 always valid regardless of which real month it falls in, unlike
+      a transaction's actual date. Both screens now hold the due day as a
+      committed-value + typed-buffer pair (same split
+      `add-transaction.tsx` uses for its date): the buffer resets to `''`
+      every time day-entry mode is (re-)entered, so on Edit (where the due
+      day is pre-filled) the first digit typed replaces the old value
+      outright instead of appending onto it or being rejected as "already
+      2 digits" — the display falls back to the last committed value only
+      while the buffer is still empty, and re-entering day-entry mode after
+      typing (without confirming) correctly shows what was just typed, not
+      the original pre-filled value. 385 tests total across 41 suites.
 
 **Scaffold caveats worth knowing before the next `npm install` in this
 repo** (SDK 57 is very new — pin these deliberately, don't let npm grab
