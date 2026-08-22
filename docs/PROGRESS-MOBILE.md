@@ -426,6 +426,18 @@ default.
       `ListRow`'s `percentText` prop, the thing it computed the value for;
       left orphaned at the time rather than cleaned up alongside it. 284
       tests total across 35 suites.
+- [x] Two small usability fixes, reported directly against the running
+      app: (1) `IconPicker`'s grid (`src/components/IconPicker.tsx`) was
+      left-aligned per row, leaving a ragged, sometimes wide gap on the
+      right whenever a row of icons didn't exactly fill the container —
+      added `justifyContent: 'center'` so a partially-filled row centers
+      instead. (2) `ExistingCategoryPicker` (used by Add/Edit
+      Transaction's category picker and Add Category's existing-category
+      choice) now sorts its `categories` prop alphabetically by name
+      before rendering, instead of echoing whatever order the backend
+      happened to return — the backend doesn't document any particular
+      `categoryMonths`/catalog ordering, so this is a client-side
+      guarantee, not a backend contract. 286 tests total across 35 suites.
 
 **Scaffold caveats worth knowing before the next `npm install` in this
 repo** (SDK 57 is very new — pin these deliberately, don't let npm grab

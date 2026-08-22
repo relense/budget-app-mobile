@@ -19,9 +19,14 @@ export function ExistingCategoryPicker({
 }) {
   const { colors } = useTheme();
 
+  // Sorted here rather than by each caller -- the backend doesn't guarantee any particular
+  // order, and a picker list is easiest to scan alphabetically regardless of which screen it's
+  // shown from.
+  const sortedCategories = [...categories].sort((a, b) => a.name.localeCompare(b.name));
+
   return (
     <View>
-      {categories.map((category) => (
+      {sortedCategories.map((category) => (
         <Pressable
           key={category.id}
           testID={`existing-category-${category.id}`}
