@@ -775,6 +775,34 @@ default.
       this one. 402 tests total across 41 suites (no new tests; only the
       two hardcoded message-text assertions in `edit-category.test.tsx`
       needed updating for the reworded copy).
+- [x] Recurring expenses now keep their category's own `monthlyBudgetCents`
+      in sync, client-side only (no backend change — the user explicitly
+      asked for the FE-only route if it was simpler, and it was: both
+      `createRecurringExpense`'s existing `categoryMonthlyBudgetCents`
+      param and `updateCategoryMonthBudget` already covered everything
+      needed). New shared helper `syncCategoryMonthBudget` (`src/lib/`)
+      takes the current `categoryMonths` list, a `categoryId`, and a
+      `deltaCents`, and — best-effort, swallowing its own errors since the
+      primary action has already saved by the time it runs — adds that
+      delta onto the matching category's existing budget (clamped at 0),
+      or no-ops if that category has no budget row this month yet (a
+      fresh activation) rather than guessing what it should start at.
+      Wired into three call sites: **create** (`add-recurring-expense.tsx`)
+      adds the new bill's full amount; **edit**
+      (`edit-recurring-expense.tsx`) applies the amount delta onto the
+      same category when the category didn't change, or moves the full
+      old/new amounts between the old and new category when it did (two
+      calls, not one delta, since they're two different budget rows);
+      **delete** subtracts the bill's amount back out. Explicitly scoped
+      down per the user's own correction mid-build: no attempt to solve
+      the "category not yet active this month, but has budget history in
+      some other month" edge case (would need an extra query to know what
+      that inherited value even is) — and no protection against a
+      concurrent manual budget edit in `edit-category.tsx` clobbering or
+      being clobbered by this, since the user was explicit that a
+      deliberate manual edit should just win, full stop. 415 tests total
+      across 42 suites (6 new for `syncCategoryMonthBudget` itself, 3 for
+      the create-screen integration, 4 for the edit-screen integration).
 
 **Scaffold caveats worth knowing before the next `npm install` in this
 repo** (SDK 57 is very new — pin these deliberately, don't let npm grab

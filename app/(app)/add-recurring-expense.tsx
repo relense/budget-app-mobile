@@ -13,7 +13,8 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { useCurrentMonth } from '../../src/api/budgetHomeQueries';
+import { useCategoryMonths, useCurrentMonth } from '../../src/api/budgetHomeQueries';
+import { useUpdateCategoryMonthBudget } from '../../src/api/categoryMutations';
 import { useCategories } from '../../src/api/categoryQueries';
 import { useCreateRecurringExpense } from '../../src/api/recurringExpenseMutations';
 import type { Category } from '../../src/api/types';
@@ -35,6 +36,7 @@ import {
   isCompleteDayDigits,
 } from '../../src/lib/dateInput';
 import { budgetTypeForCategory } from '../../src/lib/recurringBudgetType';
+import { syncCategoryMonthBudget } from '../../src/lib/syncCategoryMonthBudget';
 import { todayIsoDate } from '../../src/lib/today';
 import { useTheme } from '../../src/theme/ThemeProvider';
 
@@ -53,7 +55,9 @@ export default function AddRecurringExpenseScreen() {
   const currentMonthQuery = useCurrentMonth();
   const month = currentMonthQuery.data?.month;
   const categoriesQuery = useCategories();
+  const categoryMonthsQuery = useCategoryMonths(month, 'EXPENSE');
   const createRecurringExpense = useCreateRecurringExpense();
+  const updateCategoryMonthBudget = useUpdateCategoryMonthBudget();
 
   const expenseCategories = (categoriesQuery.data ?? []).filter(
     (c) => c.direction === 'EXPENSE',
@@ -94,8 +98,10 @@ export default function AddRecurringExpenseScreen() {
     };
   }, []);
 
-  const isCatalogLoading = currentMonthQuery.isLoading || categoriesQuery.isLoading;
-  const isCatalogError = currentMonthQuery.isError || categoriesQuery.isError;
+  const isCatalogLoading =
+    currentMonthQuery.isLoading || categoriesQuery.isLoading || categoryMonthsQuery.isLoading;
+  const isCatalogError =
+    currentMonthQuery.isError || categoriesQuery.isError || categoryMonthsQuery.isError;
   const catalogReady = !isCatalogLoading && !isCatalogError && !!month;
 
   const selectedCategory: Category | null =
@@ -108,6 +114,7 @@ export default function AddRecurringExpenseScreen() {
   const canSubmit =
     catalogReady &&
     !createRecurringExpense.isPending &&
+    !updateCategoryMonthBudget.isPending &&
     !!selectedCategory &&
     name.trim().length > 0 &&
     amountTextToCents(amountText) > 0;
@@ -148,6 +155,15 @@ export default function AddRecurringExpenseScreen() {
         dueDay: finalDueDay,
         month,
       });
+      // This bill's amount is still a budget for its category -- fold it into the category's
+      // own monthlyBudgetCents too, on top of whatever was already there (see
+      // syncCategoryMonthBudget's own comment for the exact semantics/edge cases).
+      await syncCategoryMonthBudget(
+        categoryMonthsQuery.data,
+        selectedCategory.id,
+        amountTextToCents(amountText),
+        (input) => updateCategoryMonthBudget.mutateAsync(input),
+      );
       router.back();
     } catch {
       // createRecurringExpense.isError drives the inline error message below.
@@ -166,6 +182,7 @@ export default function AddRecurringExpenseScreen() {
             onRetry={() => {
               currentMonthQuery.refetch();
               categoriesQuery.refetch();
+              categoryMonthsQuery.refetch();
             }}
           />
         </View>

@@ -7,7 +7,8 @@ const testSafeAreaMetrics = {
   insets: { top: 47, left: 0, right: 0, bottom: 34 },
 };
 
-import { useCurrentMonth } from '../../../src/api/budgetHomeQueries';
+import { useCategoryMonths, useCurrentMonth } from '../../../src/api/budgetHomeQueries';
+import { useUpdateCategoryMonthBudget } from '../../../src/api/categoryMutations';
 import { useCategories } from '../../../src/api/categoryQueries';
 import {
   useMarkRecurringPaid,
@@ -20,6 +21,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import EditRecurringExpenseScreen from '../../../app/(app)/edit-recurring-expense';
 
 jest.mock('../../../src/api/budgetHomeQueries');
+jest.mock('../../../src/api/categoryMutations');
 jest.mock('../../../src/api/categoryQueries');
 jest.mock('../../../src/api/recurringExpenseMutations');
 jest.mock('../../../src/lib/today', () => ({
@@ -40,6 +42,8 @@ jest.spyOn(Keyboard, 'addListener').mockImplementation((event, callback) => {
 });
 
 const mockedUseCurrentMonth = useCurrentMonth as jest.Mock;
+const mockedUseCategoryMonths = useCategoryMonths as jest.Mock;
+const mockedUseUpdateCategoryMonthBudget = useUpdateCategoryMonthBudget as jest.Mock;
 const mockedUseCategories = useCategories as jest.Mock;
 const mockedUseUpdateRecurringExpense = useUpdateRecurringExpense as jest.Mock;
 const mockedUseMarkRecurringPaid = useMarkRecurringPaid as jest.Mock;
@@ -52,6 +56,7 @@ const updateMutateAsync = jest.fn();
 const markPaidMutateAsync = jest.fn();
 const unmarkPaidMutateAsync = jest.fn();
 const removeMutateAsync = jest.fn();
+const updateCategoryMonthBudgetMutateAsync = jest.fn();
 
 const shoppingCategory = {
   id: 'c-shopping',
@@ -71,6 +76,31 @@ const housingCategory = {
   color: '#7048E8',
   budgetType: 'WANT',
   direction: 'EXPENSE',
+};
+
+// Both categories already have a budget row this month by default, so most existing tests
+// (which don't care about the budget-sync feature at all) exercise the "already active" path --
+// see the dedicated describe block below for the "no budget row this month" path. Shopping's
+// monthlyBudgetCents (70000) already includes baseParams' own amountCents (2196), same as it
+// would in reality once this bill's amount had been folded in on create.
+const shoppingCategoryMonth = {
+  id: 'cm-shopping',
+  month: '2026-09',
+  monthlyBudgetCents: 70000,
+  actualAmountCents: 0,
+  recurringCommittedCents: 2196,
+  category: shoppingCategory,
+  transactions: [],
+};
+
+const housingCategoryMonth = {
+  id: 'cm-housing',
+  month: '2026-09',
+  monthlyBudgetCents: 100000,
+  actualAmountCents: 0,
+  recurringCommittedCents: 0,
+  category: housingCategory,
+  transactions: [],
 };
 
 const baseParams = {
@@ -111,6 +141,17 @@ beforeEach(() => {
     isLoading: false,
     isError: false,
     refetch: jest.fn(),
+  });
+  mockedUseCategoryMonths.mockReturnValue({
+    data: [shoppingCategoryMonth, housingCategoryMonth],
+    isLoading: false,
+    isError: false,
+    refetch: jest.fn(),
+  });
+  updateCategoryMonthBudgetMutateAsync.mockResolvedValue(undefined);
+  mockedUseUpdateCategoryMonthBudget.mockReturnValue({
+    mutateAsync: updateCategoryMonthBudgetMutateAsync,
+    isPending: false,
   });
   updateMutateAsync.mockResolvedValue(undefined);
   markPaidMutateAsync.mockResolvedValue(undefined);
@@ -443,6 +484,74 @@ describe('EditRecurringExpenseScreen', () => {
 
     expect(unmarkPaidMutateAsync).toHaveBeenCalledWith([]);
     expect(mockedRouterBack).toHaveBeenCalledTimes(1);
+  });
+
+  describe('syncing the category budget alongside the recurring expense', () => {
+    it('applies the amount delta onto the same category\'s budget when only the amount changed', async () => {
+      await renderScreen();
+
+      // Pre-filled amount is 21.96 (2196 cents); backspace clears it, then typing "50" -> 5000.
+      await fireEvent.press(screen.getByTestId('keypad-backspace'));
+      await fireEvent.press(screen.getByTestId('keypad-digit-5'));
+      await fireEvent.press(screen.getByTestId('keypad-digit-0'));
+      await fireEvent.press(screen.getByTestId('keypad-confirm'));
+
+      // shoppingCategoryMonth starts at 70000; delta is 5000 - 2196 = 2804.
+      expect(updateCategoryMonthBudgetMutateAsync).toHaveBeenCalledWith({
+        categoryMonthId: 'cm-shopping',
+        monthlyBudgetCents: 72804,
+      });
+      expect(mockedRouterBack).toHaveBeenCalledTimes(1);
+    });
+
+    it('moves the full amount from the old category to the new one when the category changed', async () => {
+      await renderScreen();
+
+      await fireEvent.press(screen.getByTestId('category-pill'));
+      await fireEvent.press(screen.getByTestId('existing-category-c-housing'));
+      await fireEvent.press(screen.getByTestId('keypad-confirm'));
+
+      // Old category (shopping, 70000) loses the full original amount (2196); new category
+      // (housing, 100000) gains the full (unchanged) amount (2196) -- two separate calls, not
+      // one delta on either.
+      expect(updateCategoryMonthBudgetMutateAsync).toHaveBeenCalledWith({
+        categoryMonthId: 'cm-shopping',
+        monthlyBudgetCents: 67804,
+      });
+      expect(updateCategoryMonthBudgetMutateAsync).toHaveBeenCalledWith({
+        categoryMonthId: 'cm-housing',
+        monthlyBudgetCents: 102196,
+      });
+      expect(mockedRouterBack).toHaveBeenCalledTimes(1);
+    });
+
+    it('subtracts this bill\'s amount from its category\'s budget once deleted', async () => {
+      const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation((_title, _msg, buttons) => {
+        const destructive = buttons?.find((b) => b.style === 'destructive');
+        destructive?.onPress?.();
+      });
+
+      await renderScreen();
+      await fireEvent.press(screen.getByTestId('delete-recurring-expense-button'));
+
+      expect(updateCategoryMonthBudgetMutateAsync).toHaveBeenCalledWith({
+        categoryMonthId: 'cm-shopping',
+        monthlyBudgetCents: 67804,
+      });
+      expect(mockedRouterBack).toHaveBeenCalledTimes(1);
+
+      alertSpy.mockRestore();
+    });
+
+    it('still navigates back even if the budget sync itself fails -- the edit/delete was already saved', async () => {
+      updateCategoryMonthBudgetMutateAsync.mockRejectedValue(new Error('network error'));
+      await renderScreen();
+
+      await fireEvent.press(screen.getByTestId('keypad-confirm'));
+
+      expect(mockedRouterBack).toHaveBeenCalledTimes(1);
+      expect(screen.queryByText('Something went wrong. Please try again.')).toBeNull();
+    });
   });
 
   it('does not cover the name field with the keyboard-dismiss overlay while it is focused (was interfering with typing)', async () => {

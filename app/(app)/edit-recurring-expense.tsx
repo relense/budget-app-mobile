@@ -14,7 +14,8 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { useCurrentMonth } from '../../src/api/budgetHomeQueries';
+import { useCategoryMonths, useCurrentMonth } from '../../src/api/budgetHomeQueries';
+import { useUpdateCategoryMonthBudget } from '../../src/api/categoryMutations';
 import { useCategories } from '../../src/api/categoryQueries';
 import {
   useMarkRecurringPaid,
@@ -42,6 +43,7 @@ import {
   isCompleteDayDigits,
 } from '../../src/lib/dateInput';
 import { budgetTypeForCategory } from '../../src/lib/recurringBudgetType';
+import { syncCategoryMonthBudget } from '../../src/lib/syncCategoryMonthBudget';
 import { todayIsoDate } from '../../src/lib/today';
 import { useTheme } from '../../src/theme/ThemeProvider';
 
@@ -75,7 +77,9 @@ export default function EditRecurringExpenseScreen() {
   const currentMonthQuery = useCurrentMonth();
   const month = currentMonthQuery.data?.month;
   const categoriesQuery = useCategories();
+  const categoryMonthsQuery = useCategoryMonths(month, 'EXPENSE');
   const updateRecurringExpense = useUpdateRecurringExpense();
+  const updateCategoryMonthBudget = useUpdateCategoryMonthBudget();
   const markRecurringPaid = useMarkRecurringPaid();
   const unmarkRecurringPaid = useUnmarkRecurringPaid();
   const removeFromMonth = useRemoveRecurringExpenseFromMonth();
@@ -144,6 +148,7 @@ export default function EditRecurringExpenseScreen() {
   const dueDay = isCompleteDayDigits(dueDayDigits) ? Number(dueDayDigits) : null;
   const isMutating =
     updateRecurringExpense.isPending ||
+    updateCategoryMonthBudget.isPending ||
     markRecurringPaid.isPending ||
     unmarkRecurringPaid.isPending ||
     removeFromMonth.isPending;
@@ -222,15 +227,45 @@ export default function EditRecurringExpenseScreen() {
     // rather than blocking the save or sending an invalid one (RecurringExpenseInput.dueDay is
     // required, there's no "leave it unchanged" option server-side).
     const finalDueDay = dueDay ?? Number(params.dueDay);
+    const newAmountCents = amountTextToCents(amountText);
+    const oldAmountCents = Number(params.amountCents);
+    const categoryChanged = selectedCategory.id !== params.categoryId;
     try {
       await updateRecurringExpense.mutateAsync({
         recurringExpenseId: params.recurringExpenseId,
         name: name.trim(),
-        amountCents: amountTextToCents(amountText),
+        amountCents: newAmountCents,
         categoryId: selectedCategory.id,
         budgetType: budgetTypeForCategory(selectedCategory),
         dueDay: finalDueDay,
       });
+      // Keep each affected category's own monthlyBudgetCents in sync with this bill's amount --
+      // see syncCategoryMonthBudget's own comment for the exact semantics/edge cases. If the
+      // category changed, this bill's old amount comes out of the old category and the new
+      // amount goes into the new one, rather than a single delta on one category.
+      const updateBudget = (input: Parameters<typeof updateCategoryMonthBudget.mutateAsync>[0]) =>
+        updateCategoryMonthBudget.mutateAsync(input);
+      if (categoryChanged) {
+        await syncCategoryMonthBudget(
+          categoryMonthsQuery.data,
+          params.categoryId,
+          -oldAmountCents,
+          updateBudget,
+        );
+        await syncCategoryMonthBudget(
+          categoryMonthsQuery.data,
+          selectedCategory.id,
+          newAmountCents,
+          updateBudget,
+        );
+      } else {
+        await syncCategoryMonthBudget(
+          categoryMonthsQuery.data,
+          selectedCategory.id,
+          newAmountCents - oldAmountCents,
+          updateBudget,
+        );
+      }
       router.back();
     } catch {
       setToastMessage(GENERIC_ERROR_MESSAGE);
@@ -258,13 +293,21 @@ export default function EditRecurringExpenseScreen() {
   async function handleDeleteConfirmed() {
     try {
       await removeFromMonth.mutateAsync({ recurringExpenseId: params.recurringExpenseId });
+      // This bill no longer commits anything -- take its amount back out of the category's own
+      // monthlyBudgetCents (see syncCategoryMonthBudget's own comment for the exact semantics).
+      await syncCategoryMonthBudget(
+        categoryMonthsQuery.data,
+        params.categoryId,
+        -Number(params.amountCents),
+        (input) => updateCategoryMonthBudget.mutateAsync(input),
+      );
       router.back();
     } catch {
       setToastMessage(GENERIC_ERROR_MESSAGE);
     }
   }
 
-  if (categoriesQuery.isLoading || currentMonthQuery.isLoading) {
+  if (categoriesQuery.isLoading || currentMonthQuery.isLoading || categoryMonthsQuery.isLoading) {
     return (
       <View style={[styles.container, { backgroundColor: colors.background.screen }]}>
         <View style={styles.grabberRow}>

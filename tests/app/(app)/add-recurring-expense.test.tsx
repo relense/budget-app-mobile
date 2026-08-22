@@ -7,7 +7,8 @@ const testSafeAreaMetrics = {
   insets: { top: 47, left: 0, right: 0, bottom: 34 },
 };
 
-import { useCurrentMonth } from '../../../src/api/budgetHomeQueries';
+import { useCategoryMonths, useCurrentMonth } from '../../../src/api/budgetHomeQueries';
+import { useUpdateCategoryMonthBudget } from '../../../src/api/categoryMutations';
 import { useCategories } from '../../../src/api/categoryQueries';
 import { useCreateRecurringExpense } from '../../../src/api/recurringExpenseMutations';
 import { ThemeProvider } from '../../../src/theme/ThemeProvider';
@@ -15,6 +16,7 @@ import { router } from 'expo-router';
 import AddRecurringExpenseScreen from '../../../app/(app)/add-recurring-expense';
 
 jest.mock('../../../src/api/budgetHomeQueries');
+jest.mock('../../../src/api/categoryMutations');
 jest.mock('../../../src/api/categoryQueries');
 jest.mock('../../../src/api/recurringExpenseMutations');
 jest.mock('../../../src/lib/today', () => ({
@@ -34,11 +36,14 @@ jest.spyOn(Keyboard, 'addListener').mockImplementation((event, callback) => {
 });
 
 const mockedUseCurrentMonth = useCurrentMonth as jest.Mock;
+const mockedUseCategoryMonths = useCategoryMonths as jest.Mock;
+const mockedUseUpdateCategoryMonthBudget = useUpdateCategoryMonthBudget as jest.Mock;
 const mockedUseCategories = useCategories as jest.Mock;
 const mockedUseCreateRecurringExpense = useCreateRecurringExpense as jest.Mock;
 const mockedRouterBack = router.back as jest.Mock;
 
 const createMutateAsync = jest.fn();
+const updateCategoryMonthBudgetMutateAsync = jest.fn();
 
 const shoppingCategory = {
   id: 'c-shopping',
@@ -69,6 +74,29 @@ const salaryCategory = {
   direction: 'INCOME',
 };
 
+// Both categories already have a budget row this month by default, so most existing tests
+// (which don't care about the budget-sync feature at all) exercise the "already active" path --
+// see the dedicated describe block below for the "not yet active this month" path.
+const shoppingCategoryMonth = {
+  id: 'cm-shopping',
+  month: '2026-09',
+  monthlyBudgetCents: 70000,
+  actualAmountCents: 0,
+  recurringCommittedCents: 0,
+  category: shoppingCategory,
+  transactions: [],
+};
+
+const housingCategoryMonth = {
+  id: 'cm-housing',
+  month: '2026-09',
+  monthlyBudgetCents: 100000,
+  actualAmountCents: 0,
+  recurringCommittedCents: 0,
+  category: housingCategory,
+  transactions: [],
+};
+
 function renderScreen() {
   return render(
     <SafeAreaProvider initialMetrics={testSafeAreaMetrics}>
@@ -95,11 +123,22 @@ beforeEach(() => {
     isError: false,
     refetch: jest.fn(),
   });
+  mockedUseCategoryMonths.mockReturnValue({
+    data: [shoppingCategoryMonth, housingCategoryMonth],
+    isLoading: false,
+    isError: false,
+    refetch: jest.fn(),
+  });
   createMutateAsync.mockResolvedValue(undefined);
   mockedUseCreateRecurringExpense.mockReturnValue({
     mutateAsync: createMutateAsync,
     isPending: false,
     isError: false,
+  });
+  updateCategoryMonthBudgetMutateAsync.mockResolvedValue(undefined);
+  mockedUseUpdateCategoryMonthBudget.mockReturnValue({
+    mutateAsync: updateCategoryMonthBudgetMutateAsync,
+    isPending: false,
   });
 });
 
@@ -364,6 +403,53 @@ describe('AddRecurringExpenseScreen', () => {
 
     expect(screen.getByText('Something went wrong. Please try again.')).toBeTruthy();
     expect(mockedRouterBack).not.toHaveBeenCalled();
+  });
+
+  describe('syncing the category budget alongside the recurring expense', () => {
+    it('adds the new bill\'s amount onto the category\'s existing budget after a successful create', async () => {
+      await renderScreen();
+
+      await fireEvent.changeText(screen.getByTestId('recurring-name-input'), 'Water');
+      await fireEvent.press(screen.getByTestId('keypad-digit-5'));
+      await fireEvent.press(screen.getByTestId('keypad-confirm'));
+
+      // shoppingCategoryMonth starts at 70000; the new bill is 500 cents (€5.00).
+      expect(updateCategoryMonthBudgetMutateAsync).toHaveBeenCalledWith({
+        categoryMonthId: 'cm-shopping',
+        monthlyBudgetCents: 70500,
+      });
+      expect(mockedRouterBack).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not touch any category budget when the chosen category has no budget row this month yet', async () => {
+      mockedUseCategoryMonths.mockReturnValue({
+        data: [],
+        isLoading: false,
+        isError: false,
+        refetch: jest.fn(),
+      });
+      await renderScreen();
+
+      await fireEvent.changeText(screen.getByTestId('recurring-name-input'), 'Water');
+      await fireEvent.press(screen.getByTestId('keypad-digit-5'));
+      await fireEvent.press(screen.getByTestId('keypad-confirm'));
+
+      expect(updateCategoryMonthBudgetMutateAsync).not.toHaveBeenCalled();
+      expect(createMutateAsync).toHaveBeenCalled();
+      expect(mockedRouterBack).toHaveBeenCalledTimes(1);
+    });
+
+    it('still navigates back even if the budget sync itself fails -- the recurring expense was already saved', async () => {
+      updateCategoryMonthBudgetMutateAsync.mockRejectedValue(new Error('network error'));
+      await renderScreen();
+
+      await fireEvent.changeText(screen.getByTestId('recurring-name-input'), 'Water');
+      await fireEvent.press(screen.getByTestId('keypad-digit-5'));
+      await fireEvent.press(screen.getByTestId('keypad-confirm'));
+
+      expect(mockedRouterBack).toHaveBeenCalledTimes(1);
+      expect(screen.queryByText('Something went wrong. Please try again.')).toBeNull();
+    });
   });
 
   it('does not cover the name field with the keyboard-dismiss overlay while it is focused (was interfering with typing)', async () => {
