@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import { IconPicker } from '../../../src/components/IconPicker';
-import { EXPENSE_ICON_PALETTE } from '../../../src/lib/categoryIconPalette';
+import { EXPENSE_ICON_PALETTE, INCOME_ICON_PALETTE } from '../../../src/lib/categoryIconPalette';
 import { ThemeProvider } from '../../../src/theme/ThemeProvider';
 
 function renderPicker(props: Partial<React.ComponentProps<typeof IconPicker>> = {}) {
@@ -51,5 +51,14 @@ describe('IconPicker', () => {
 
     expect(selectedStyle.some((s) => s.borderWidth === 2)).toBe(true);
     expect(unselectedStyle.some((s) => s.borderWidth === 2)).toBe(false);
+  });
+
+  it('renders options from a custom palette instead of the expense default when given one', async () => {
+    await renderPicker({ palette: INCOME_ICON_PALETTE, selectedIcon: 'briefcase' });
+
+    for (const { icon } of INCOME_ICON_PALETTE) {
+      expect(screen.getByTestId(`icon-option-${icon}`)).toBeTruthy();
+    }
+    expect(screen.queryByTestId('icon-option-cart')).toBeNull();
   });
 });

@@ -9,9 +9,12 @@ import {
   useUpdateCategory,
   useUpdateCategoryMonthBudget,
 } from '../../src/api/categoryMutations';
+import { hasGraphqlErrorCode } from '../../src/api/graphqlClient';
+import { useDeleteTransaction } from '../../src/api/transactionMutations';
 import type { BudgetType, Direction } from '../../src/api/types';
 import { AmountKeypad } from '../../src/components/AmountKeypad';
 import { CategoryIcon } from '../../src/components/CategoryIcon';
+import { IconPicker } from '../../src/components/IconPicker';
 import { Toast } from '../../src/components/Toast';
 import {
   amountTextToCents,
@@ -20,11 +23,24 @@ import {
   backspaceAmount,
   centsToAmountText,
 } from '../../src/lib/amountInput';
-import { colorForIcon } from '../../src/lib/categoryIconPalette';
+import {
+  EXPENSE_ICON_PALETTE,
+  INCOME_ICON_PALETTE,
+  colorForIcon,
+  colorForIncomeIcon,
+} from '../../src/lib/categoryIconPalette';
 import { useTheme } from '../../src/theme/ThemeProvider';
 
-const TOAST_DURATION_MS = 2500;
+// Longer than the other screens' 2500ms -- this screen's delete-blocked toast
+// (CATEGORY_IN_USE_MESSAGE below) is a full sentence and needs more time to read than the
+// short generic fallback.
+const TOAST_DURATION_MS = 4500;
 const GENERIC_ERROR_MESSAGE = 'Something went wrong. Please try again.';
+// removeCategoryFromMonth throws one of these two codes (see docs/SERVICES.md) when the
+// category still has real data hanging off it -- surfaced as a specific, actionable message
+// instead of the generic fallback, so the user knows exactly what to go delete first.
+const CATEGORY_IN_USE_MESSAGE =
+  'This category still has transactions or recurring expenses linked to it — delete those first.';
 
 export default function EditCategoryScreen() {
   const { colors } = useTheme();
@@ -38,12 +54,26 @@ export default function EditCategoryScreen() {
     budgetType: string;
     direction: string;
     monthlyBudgetCents: string;
+    recurringCommittedCents: string;
+    transactionIds: string;
   }>();
   const updateBudget = useUpdateCategoryMonthBudget();
   const updateCategory = useUpdateCategory();
   const removeFromMonth = useRemoveCategoryFromMonth();
+  const deleteTransaction = useDeleteTransaction();
+
+  const isIncome = params.direction === 'INCOME';
+  // Mutable, starting from the route params' snapshot -- shrinks as deletes succeed (see
+  // handleDeleteConfirmed) so a retry after a partial failure only re-attempts the ones that
+  // actually failed, instead of re-sending already-deleted ids forever (those would just keep
+  // failing "not found", permanently stuck).
+  const [pendingTransactionIds, setPendingTransactionIds] = useState<string[]>(() =>
+    params.transactionIds ? JSON.parse(params.transactionIds) : [],
+  );
 
   const [name, setName] = useState(params.name);
+  const [icon, setIcon] = useState(params.icon);
+  const [iconPickerOpen, setIconPickerOpen] = useState(false);
   const [amountText, setAmountText] = useState(() =>
     centsToAmountText(Number(params.monthlyBudgetCents)),
   );
@@ -55,6 +85,12 @@ export default function EditCategoryScreen() {
   // empty field; backspace (which has no such guard) is unaffected either way.
   const [hasEditedAmount, setHasEditedAmount] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
+  // Same fix as add/edit-recurring-expense.tsx: the keyboard-dismiss-overlay below is meant
+  // only to eat a stray tap-to-dismiss landing on a keypad button underneath, but rendering it
+  // the instant the keyboard appears (the same moment the name field is tapped) sat it directly
+  // on top of the just-focused native TextInput. Gated on this so it never covers the field
+  // currently being typed into.
+  const [nameFocused, setNameFocused] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   useEffect(() => {
@@ -72,8 +108,25 @@ export default function EditCategoryScreen() {
     return () => clearTimeout(timer);
   }, [toastMessage]);
 
-  const color = colorForIcon(params.icon);
-  const canSubmit = !updateBudget.isPending && !updateCategory.isPending && name.trim().length > 0;
+  const iconPalette = isIncome ? INCOME_ICON_PALETTE : EXPENSE_ICON_PALETTE;
+  const color = isIncome ? colorForIncomeIcon(icon) : colorForIcon(icon);
+  const budgetLabel = isIncome ? 'Expected income' : 'Total budget';
+  // The floor this category's budget can't go below: whatever's already committed to it via
+  // recurring expenses (see syncCategoryMonthBudget) -- a manually-set budget lower than that
+  // would immediately contradict money the user has already committed to spending. Always 0 for
+  // an income category (recurring expenses are expense-only) or one with no recurring expenses.
+  const minimumBudgetCents = Number(params.recurringCommittedCents || '0');
+  // While the field is blank (backspaced to nothing), its effective value is the minimum itself
+  // -- both what's shown as the placeholder below and what actually gets submitted if the user
+  // confirms without typing a new number, same "the placeholder is a real, submittable default"
+  // pattern as due-day elsewhere in this app.
+  const effectiveAmountCents =
+    amountText === '' ? minimumBudgetCents : amountTextToCents(amountText);
+  const canSubmit =
+    !updateBudget.isPending &&
+    !updateCategory.isPending &&
+    name.trim().length > 0 &&
+    effectiveAmountCents >= minimumBudgetCents;
 
   function handleDigit(digit: string) {
     if (!hasEditedAmount) {
@@ -106,21 +159,21 @@ export default function EditCategoryScreen() {
     if (!canSubmit) return;
     try {
       const trimmedName = name.trim();
-      if (trimmedName !== params.name) {
+      if (trimmedName !== params.name || icon !== params.icon) {
         // CategoryInput is a full replace, not a patch -- every field must be resent even
-        // though only the name actually changed here (see docs/PLAN.md).
+        // though only the name/icon actually changed here (see docs/PLAN.md).
         await updateCategory.mutateAsync({
           categoryId: params.categoryId,
           name: trimmedName,
-          icon: params.icon,
-          color: params.color,
+          icon,
+          color,
           budgetType: (params.budgetType || null) as BudgetType | null,
           direction: params.direction as Direction,
         });
       }
       await updateBudget.mutateAsync({
         categoryMonthId: params.categoryMonthId,
-        monthlyBudgetCents: amountTextToCents(amountText),
+        monthlyBudgetCents: effectiveAmountCents,
       });
       router.back();
     } catch {
@@ -137,10 +190,46 @@ export default function EditCategoryScreen() {
 
   async function handleDeleteConfirmed() {
     try {
+      // An income category's transactions are only ever the "received" entries this same
+      // category-month's own toggle creates (see index.tsx's handleToggleIncomeReceived) --
+      // unlike an expense category, there's no independent spending history to protect here, so
+      // deleting the category can safely take them with it instead of blocking the user and
+      // making them unmark it received first. allSettled (not all) so a partial failure still
+      // surfaces as an error instead of silently leaving some deleted and the category not.
+      if (isIncome && pendingTransactionIds.length > 0) {
+        const results = await Promise.allSettled(
+          pendingTransactionIds.map((transactionId) =>
+            deleteTransaction.mutateAsync({ transactionId }).then(() => transactionId),
+          ),
+        );
+        const succeededIds = new Set(
+          results
+            .filter(
+              (result): result is PromiseFulfilledResult<string> => result.status === 'fulfilled',
+            )
+            .map((result) => result.value),
+        );
+        const stillPending = pendingTransactionIds.filter((id) => !succeededIds.has(id));
+        if (stillPending.length > 0) {
+          // Only the ones that actually failed are retried next time -- retrying the full
+          // original list would keep re-sending already-deleted ids, which fail forever ("not
+          // found") and would leave this category permanently undeletable from this screen.
+          setPendingTransactionIds(stillPending);
+          setToastMessage(GENERIC_ERROR_MESSAGE);
+          return;
+        }
+      }
       await removeFromMonth.mutateAsync({ categoryMonthId: params.categoryMonthId });
       router.back();
-    } catch {
-      setToastMessage(GENERIC_ERROR_MESSAGE);
+    } catch (err) {
+      if (
+        hasGraphqlErrorCode(err, 'CATEGORY_MONTH_HAS_TRANSACTIONS') ||
+        hasGraphqlErrorCode(err, 'CATEGORY_MONTH_HAS_RECURRING_EXPENSES')
+      ) {
+        setToastMessage(CATEGORY_IN_USE_MESSAGE);
+      } else {
+        setToastMessage(GENERIC_ERROR_MESSAGE);
+      }
     }
   }
 
@@ -152,24 +241,50 @@ export default function EditCategoryScreen() {
 
       <View style={[styles.content, { paddingBottom: insets.bottom + 16 }]}>
         <View style={styles.identityRow}>
-          <View style={[styles.iconPill, { backgroundColor: color }]}>
-            <CategoryIcon name={params.icon} color={colors.text.primary} />
-          </View>
+          <Pressable
+            testID="icon-pill"
+            style={[styles.iconPill, { backgroundColor: color }]}
+            onPress={() => setIconPickerOpen((current) => !current)}
+          >
+            <CategoryIcon name={icon} color={colors.text.primary} />
+            <MaterialCommunityIcons
+              name={iconPickerOpen ? 'chevron-up' : 'chevron-down'}
+              size={16}
+              color={colors.text.primary}
+            />
+          </Pressable>
           <TextInput
             testID="category-name-input"
             style={[styles.nameInput, { backgroundColor: colors.pill.textInputBackground }]}
             value={name}
             onChangeText={setName}
+            onFocus={() => setNameFocused(true)}
+            onBlur={() => setNameFocused(false)}
           />
         </View>
 
-        <Text style={[styles.budgetLabel, { color: colors.text.secondary }]}>Total budget</Text>
+        <Text style={[styles.budgetLabel, { color: colors.text.secondary }]}>{budgetLabel}</Text>
         <Text style={styles.amountRow}>
           <Text style={[styles.currencyPrefix, { color: colors.text.secondary }]}>€</Text>
-          <Text style={[styles.amountText, { color: colors.text.primary }]}>
-            {amountText || '0'}
+          <Text
+            testID="amount-value"
+            style={[
+              styles.amountText,
+              { color: amountText === '' ? colors.text.placeholder : colors.text.primary },
+            ]}
+          >
+            {amountText || centsToAmountText(minimumBudgetCents)}
           </Text>
         </Text>
+        {minimumBudgetCents > 0 ? (
+          <Text
+            testID="minimum-budget-hint"
+            style={[styles.minimumBudgetHint, { color: colors.button.deleteBackground }]}
+          >
+            Minimum €{centsToAmountText(minimumBudgetCents)} — already committed to recurring
+            expenses this month
+          </Text>
+        ) : null}
 
         <View style={styles.keypadWrap}>
           <AmountKeypad
@@ -191,7 +306,32 @@ export default function EditCategoryScreen() {
         </Pressable>
       </View>
 
-      {keyboardVisible ? (
+      {iconPickerOpen ? (
+        <>
+          <Pressable
+            testID="icon-picker-backdrop"
+            style={[StyleSheet.absoluteFill, styles.overlayBackdrop]}
+            onPress={() => setIconPickerOpen(false)}
+          />
+          <View
+            style={[
+              styles.overlayCard,
+              { backgroundColor: colors.background.screen, borderColor: colors.segment.track },
+            ]}
+          >
+            <IconPicker
+              selectedIcon={icon}
+              palette={iconPalette}
+              onSelect={(selected) => {
+                setIcon(selected);
+                setIconPickerOpen(false);
+              }}
+            />
+          </View>
+        </>
+      ) : null}
+
+      {keyboardVisible && !nameFocused ? (
         // Same reasoning as the Add Category screen's keyboard-dismiss overlay: the first tap
         // outside a focused text input should only dismiss the keyboard, not also register as a
         // real press on whatever's underneath.
@@ -233,11 +373,13 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   iconPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
     height: 48,
     paddingHorizontal: 14,
     borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   nameInput: {
     flex: 1,
@@ -263,6 +405,12 @@ const styles = StyleSheet.create({
     fontSize: 50,
     fontFamily: 'Fredoka_400Regular',
   },
+  minimumBudgetHint: {
+    textAlign: 'center',
+    marginTop: -4,
+    marginBottom: 8,
+    fontSize: 12,
+  },
   keypadWrap: {
     flex: 1,
   },
@@ -280,5 +428,19 @@ const styles = StyleSheet.create({
   },
   keyboardDismissOverlay: {
     zIndex: 20,
+  },
+  overlayBackdrop: {
+    zIndex: 9,
+  },
+  overlayCard: {
+    position: 'absolute',
+    top: 74,
+    left: 24,
+    right: 24,
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 8,
+    zIndex: 10,
+    elevation: 4,
   },
 });

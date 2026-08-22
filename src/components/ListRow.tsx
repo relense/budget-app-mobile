@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useTheme } from '../theme/ThemeProvider';
 
@@ -10,6 +10,12 @@ export function ListRow({
   subtitle,
   amountText,
   secondaryAmountText,
+  // When given, the icon circle itself becomes a tappable target, independent of any
+  // row-level or swipe action (see the Recurrent tab's icon-tap-to-pay on Home) -- omitted
+  // entirely (not just disabled) means a plain, non-interactive View, unchanged for every
+  // other call site.
+  onIconPress,
+  iconTestID,
 }: {
   icon: ReactNode;
   circleColor: string;
@@ -17,12 +23,24 @@ export function ListRow({
   subtitle?: string;
   amountText: string;
   secondaryAmountText?: string;
+  onIconPress?: () => void;
+  iconTestID?: string;
 }) {
   const { colors } = useTheme();
 
   return (
     <View style={styles.row}>
-      <View style={[styles.iconCircle, { backgroundColor: circleColor }]}>{icon}</View>
+      {onIconPress ? (
+        <Pressable
+          testID={iconTestID}
+          style={[styles.iconCircle, { backgroundColor: circleColor }]}
+          onPress={onIconPress}
+        >
+          {icon}
+        </Pressable>
+      ) : (
+        <View style={[styles.iconCircle, { backgroundColor: circleColor }]}>{icon}</View>
+      )}
       <View style={styles.textColumn}>
         <Text style={[styles.title, { color: colors.text.primary }]} numberOfLines={1}>
           {title}

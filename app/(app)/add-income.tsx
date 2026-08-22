@@ -16,10 +16,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useCategoryMonths, useCurrentMonth } from '../../src/api/budgetHomeQueries';
 import {
   useAddCategoryToMonth,
-  useCreateCategoryWithBudget,
+  useCreateIncomeCategoryWithBudget,
 } from '../../src/api/categoryMutations';
 import { useCategories } from '../../src/api/categoryQueries';
-import type { BudgetType, Category } from '../../src/api/types';
+import type { Category } from '../../src/api/types';
 import { AmountKeypad } from '../../src/components/AmountKeypad';
 import { CategoryIcon } from '../../src/components/CategoryIcon';
 import { ExistingCategoryPicker } from '../../src/components/ExistingCategoryPicker';
@@ -32,35 +32,32 @@ import {
   appendDigit,
   backspaceAmount,
 } from '../../src/lib/amountInput';
-import { colorForIcon } from '../../src/lib/categoryIconPalette';
+import { INCOME_ICON_PALETTE, colorForIncomeIcon } from '../../src/lib/categoryIconPalette';
 import { useTheme } from '../../src/theme/ThemeProvider';
 import { filterUnusedCategories, isDuplicateCategoryName } from '../../src/lib/unusedCategories';
-
-const BUDGET_TYPES: { key: BudgetType; label: string }[] = [
-  { key: 'NEED', label: 'Need' },
-  { key: 'WANT', label: 'Want' },
-  { key: 'SAVINGS', label: 'Savings' },
-];
 
 type CategoryMode = 'undecided' | 'new' | 'existing';
 type Overlay = 'none' | 'icons' | 'existingList';
 
 const TOAST_DURATION_MS = 2500;
-const CATALOG_LOAD_ERROR = "Couldn't load your category catalog.";
+const CATALOG_LOAD_ERROR = "Couldn't load your income categories.";
 
-export default function AddCategoryScreen() {
+// Mirrors add-category.tsx's existing-vs-create-category flow, minus the Need/Want/Savings
+// picker (not meaningful for income, see docs/PLAN.md) -- everything else (icon picker, name,
+// amount keypad, duplicate-name guard) is the same shape, scoped to INCOME-direction
+// categories throughout.
+export default function AddIncomeScreen() {
   const { colors, typography } = useTheme();
   const insets = useSafeAreaInsets();
   const currentMonthQuery = useCurrentMonth();
   const month = currentMonthQuery.data?.month;
   const categoriesQuery = useCategories();
-  const expenseCategoryMonths = useCategoryMonths(month, 'EXPENSE');
-  const createCategory = useCreateCategoryWithBudget();
+  const incomeCategoryMonths = useCategoryMonths(month, 'INCOME');
+  const createCategory = useCreateIncomeCategoryWithBudget();
   const addExisting = useAddCategoryToMonth();
 
   const [name, setName] = useState('');
-  const [icon, setIcon] = useState('cart');
-  const [budgetType, setBudgetType] = useState<BudgetType>('NEED');
+  const [icon, setIcon] = useState(INCOME_ICON_PALETTE[0].icon);
   const [amountText, setAmountText] = useState('');
   const [overlay, setOverlay] = useState<Overlay>('none');
   const [categoryMode, setCategoryMode] = useState<CategoryMode>('undecided');
@@ -83,45 +80,26 @@ export default function AddCategoryScreen() {
     return () => clearTimeout(timer);
   }, [toastMessage]);
 
-  // `useCategories` is only ever called from this screen, unlike `useCategoryMonths` (which
-  // Home already warms the cache for) -- without this gate, the catalog query's first-render
-  // `undefined` defaults to an empty array, so `unusedCategories` is briefly computed as empty
-  // regardless of the real catalog. That both flips the screen from form -> choice mid-
-  // interaction once the real data lands, and -- more seriously -- lets the duplicate-name
-  // guard below be bypassed if the user confirms before this query resolves.
-  //
-  // isError is checked separately from isLoading, not folded into one flag -- in react-query
-  // v5, a failed query has isLoading: false with data still undefined, the exact same "resolved
-  // but empty" shape the loading race above exploited. Without this, a failed fetch would silently
-  // reopen that same duplicate-guard bypass instead of surfacing an error.
   const isCatalogLoading =
-    currentMonthQuery.isLoading || categoriesQuery.isLoading || expenseCategoryMonths.isLoading;
+    currentMonthQuery.isLoading || categoriesQuery.isLoading || incomeCategoryMonths.isLoading;
   const isCatalogError =
-    currentMonthQuery.isError || categoriesQuery.isError || expenseCategoryMonths.isError;
+    currentMonthQuery.isError || categoriesQuery.isError || incomeCategoryMonths.isError;
   const catalogReady = !isCatalogLoading && !isCatalogError && !!month;
   const unusedCategories = filterUnusedCategories(
     categoriesQuery.data ?? [],
-    expenseCategoryMonths.data ?? [],
-    'EXPENSE',
+    incomeCategoryMonths.data ?? [],
+    'INCOME',
   );
-  // If there's nothing to choose from, skip the choice entirely -- behaves exactly as it did
-  // before this feature existed. Otherwise wait for the user to pick a path explicitly.
   const resolvedMode: CategoryMode =
     categoryMode !== 'undecided' ? categoryMode : unusedCategories.length > 0 ? 'undecided' : 'new';
 
   const isExisting = resolvedMode === 'existing' && !!selectedExisting;
   const displayIcon = isExisting ? selectedExisting.icon : icon;
-  // Always derived from the icon, never the category's own stored color -- an existing
-  // catalog entry can carry an old/inconsistent hex, and this pill should match what was just
-  // shown for it in the existing-category list (which also uses colorForIcon).
-  const displayColor = colorForIcon(displayIcon);
+  const displayColor = colorForIncomeIcon(displayIcon);
   const displayName = isExisting ? selectedExisting.name : name;
-  const displayBudgetType = isExisting ? selectedExisting.budgetType : budgetType;
 
   const isPending = createCategory.isPending || addExisting.isPending;
   const isError = createCategory.isError || addExisting.isError;
-  // Disabled until the user has picked a category one way or another -- the budget amount
-  // itself can always be typed in the meantime, only confirming is gated.
   const canSubmit =
     catalogReady &&
     !isPending &&
@@ -150,8 +128,8 @@ export default function AddCategoryScreen() {
       return;
     }
 
-    if (isDuplicateCategoryName(categoriesQuery.data ?? [], name, 'EXPENSE')) {
-      setToastMessage('Category already exists');
+    if (isDuplicateCategoryName(categoriesQuery.data ?? [], name, 'INCOME')) {
+      setToastMessage('Income category already exists');
       return;
     }
 
@@ -159,8 +137,7 @@ export default function AddCategoryScreen() {
       await createCategory.mutateAsync({
         name: name.trim(),
         icon,
-        color: colorForIcon(icon),
-        budgetType,
+        color: colorForIncomeIcon(icon),
         month,
         monthlyBudgetCents: amountTextToCents(amountText),
       });
@@ -176,15 +153,13 @@ export default function AddCategoryScreen() {
         <View style={styles.grabberRow}>
           <View style={[styles.grabber, { backgroundColor: colors.segment.track }]} />
         </View>
-        <View testID="add-category-error" style={[styles.centered, { flex: 1 }]}>
+        <View testID="add-income-error" style={[styles.centered, { flex: 1 }]}>
           <RetryableError
             message={CATALOG_LOAD_ERROR}
             onRetry={() => {
               currentMonthQuery.refetch();
               categoriesQuery.refetch();
-              // expenseCategoryMonths is gated on `month` being known (enabled: !!month) -- only
-              // worth refetching once there's a month to scope it to.
-              if (month) expenseCategoryMonths.refetch();
+              if (month) incomeCategoryMonths.refetch();
             }}
           />
         </View>
@@ -198,7 +173,7 @@ export default function AddCategoryScreen() {
         <View style={styles.grabberRow}>
           <View style={[styles.grabber, { backgroundColor: colors.segment.track }]} />
         </View>
-        <View testID="add-category-loading" style={[styles.centered, { flex: 1 }]}>
+        <View testID="add-income-loading" style={[styles.centered, { flex: 1 }]}>
           <ActivityIndicator color={colors.text.primary} />
         </View>
       </View>
@@ -220,7 +195,7 @@ export default function AddCategoryScreen() {
               onPress={() => setOverlay('existingList')}
             >
               <Text style={[styles.choiceButtonLabel, { color: colors.text.primary }]}>
-                Select Category
+                Select Income
               </Text>
             </Pressable>
             <Pressable
@@ -229,7 +204,7 @@ export default function AddCategoryScreen() {
               onPress={() => setCategoryMode('new')}
             >
               <Text style={[styles.choiceButtonLabel, { color: colors.text.primary }]}>
-                Create Category
+                Create Income
               </Text>
             </Pressable>
           </View>
@@ -242,12 +217,8 @@ export default function AddCategoryScreen() {
                 onPress={() => {
                   setCategoryMode('undecided');
                   setSelectedExisting(null);
-                  // Otherwise a stale name/icon/budget-type from before "back" was pressed
-                  // would silently carry over into a fresh "Create New" -- this should start
-                  // genuinely blank, not resume whatever was typed the first time around.
                   setName('');
-                  setIcon('cart');
-                  setBudgetType('NEED');
+                  setIcon(INCOME_ICON_PALETTE[0].icon);
                 }}
               >
                 <MaterialCommunityIcons name="chevron-left" size={22} color={colors.text.primary} />
@@ -269,9 +240,9 @@ export default function AddCategoryScreen() {
               )}
             </Pressable>
             <TextInput
-              testID="category-name-input"
+              testID="income-name-input"
               style={[styles.nameInput, { backgroundColor: colors.pill.textInputBackground }]}
-              placeholder="Category name"
+              placeholder="Income name"
               placeholderTextColor={colors.text.secondary}
               value={displayName}
               editable={!isExisting}
@@ -280,33 +251,6 @@ export default function AddCategoryScreen() {
           </View>
         )}
 
-        <View style={[styles.budgetTypeRow, { backgroundColor: colors.segment.track }]}>
-          {BUDGET_TYPES.map(({ key, label }) => (
-            <Pressable
-              key={key}
-              style={[
-                styles.budgetTypeButton,
-                displayBudgetType === key && { backgroundColor: colors.segment.active },
-              ]}
-              onPress={isExisting ? undefined : () => setBudgetType(key)}
-            >
-              <Text
-                style={[
-                  typography.scale.segmentLabel,
-                  {
-                    color:
-                      displayBudgetType === key
-                        ? colors.segment.activeText
-                        : colors.segment.inactiveText,
-                  },
-                ]}
-              >
-                {label}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-
         <Text
           style={[
             typography.scale.listSubtitle,
@@ -314,7 +258,7 @@ export default function AddCategoryScreen() {
             { color: colors.text.secondary },
           ]}
         >
-          Total category budget
+          Expected income
         </Text>
         <Text style={styles.amountRow}>
           <Text style={[styles.currencyPrefix, { color: colors.text.secondary }]}>€</Text>
@@ -342,9 +286,6 @@ export default function AddCategoryScreen() {
 
       {overlay !== 'none' ? (
         <>
-          {/* Full-screen backdrop, sibling of `content` so it covers the whole screen -- tapping
-              anywhere outside the picker closes it, same pattern as the Home screen's header
-              metric menu. Overlays on top instead of pushing the rest of the form down. */}
           <Pressable
             testID="icon-picker-backdrop"
             style={[StyleSheet.absoluteFill, styles.overlayBackdrop]}
@@ -366,6 +307,7 @@ export default function AddCategoryScreen() {
             ) : (
               <IconPicker
                 selectedIcon={icon}
+                palette={INCOME_ICON_PALETTE}
                 onSelect={(selected) => {
                   setIcon(selected);
                   setOverlay('none');
@@ -377,11 +319,6 @@ export default function AddCategoryScreen() {
       ) : null}
 
       {keyboardVisible ? (
-        // Eats the very first tap outside the text input while the keyboard is up: without
-        // this, tapping a keypad digit to dismiss the keyboard also registered as a real digit
-        // press in the same touch (the OS blurs the input and the button's onPress both fire
-        // from one tap). This overlay unmounts the instant the keyboard actually hides, so a
-        // second, deliberate tap reaches the real buttons normally.
         <Pressable
           testID="keyboard-dismiss-overlay"
           style={[StyleSheet.absoluteFill, styles.keyboardDismissOverlay]}
@@ -472,17 +409,6 @@ const styles = StyleSheet.create({
   },
   existingListScroll: {
     maxHeight: 260,
-  },
-  budgetTypeRow: {
-    flexDirection: 'row',
-    borderRadius: 20,
-    padding: 4,
-  },
-  budgetTypeButton: {
-    flex: 1,
-    borderRadius: 16,
-    paddingVertical: 8,
-    alignItems: 'center',
   },
   budgetLabel: {
     textAlign: 'center',

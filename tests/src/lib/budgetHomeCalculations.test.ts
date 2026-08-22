@@ -34,6 +34,7 @@ function recurringExpense(overrides: Partial<RecurringExpense> = {}): RecurringE
     amountCents: 2196,
     budgetType: 'NEED',
     dueDay: 10,
+    dueDate: '2026-08-10',
     paidThisMonth: false,
     category: {
       id: 'c1',
@@ -85,7 +86,11 @@ describe('sumRecurringCents', () => {
 describe('mostRecentDate', () => {
   it('returns the latest date string', () => {
     expect(
-      mostRecentDate([{ date: '2026-08-01' }, { date: '2026-08-15' }, { date: '2026-08-03' }]),
+      mostRecentDate([
+        { id: 't1', date: '2026-08-01' },
+        { id: 't2', date: '2026-08-15' },
+        { id: 't3', date: '2026-08-03' },
+      ]),
     ).toBe('2026-08-15');
   });
 

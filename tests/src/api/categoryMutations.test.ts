@@ -3,6 +3,8 @@ import {
   addCategoryToMonthMutationFn,
   createCategoryWithBudget,
   createCategoryWithBudgetMutationFn,
+  createIncomeCategoryWithBudget,
+  createIncomeCategoryWithBudgetMutationFn,
   removeCategoryFromMonth,
   removeCategoryFromMonthMutationFn,
   updateCategory,
@@ -86,6 +88,68 @@ describe('createCategoryWithBudget', () => {
         budgetType: 'NEED',
         month: '2026-09',
         monthlyBudgetCents: 70000,
+      }),
+    ).rejects.toThrow('network error');
+
+    expect(mockedGraphqlRequest).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('createIncomeCategoryWithBudget', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('creates an INCOME-direction category with no budgetType, then activates it in the given month', async () => {
+    mockedGraphqlRequest.mockResolvedValueOnce({ createCategory: { id: 'cat-1' } });
+    mockedGraphqlRequest.mockResolvedValueOnce({ addCategoryToMonth: { id: 'cm-1' } });
+
+    await createIncomeCategoryWithBudget('http://api.test', 'token-1', {
+      name: 'Obconnect',
+      icon: 'briefcase',
+      color: '#B8D8F0',
+      month: '2026-09',
+      monthlyBudgetCents: 430000,
+    });
+
+    expect(mockedGraphqlRequest).toHaveBeenNthCalledWith(
+      1,
+      'http://api.test',
+      'token-1',
+      expect.stringContaining('createCategory'),
+      {
+        input: {
+          name: 'Obconnect',
+          icon: 'briefcase',
+          color: '#B8D8F0',
+          budgetType: null,
+          direction: 'INCOME',
+        },
+      },
+    );
+    expect(mockedGraphqlRequest).toHaveBeenNthCalledWith(
+      2,
+      'http://api.test',
+      'token-1',
+      expect.stringContaining('addCategoryToMonth'),
+      {
+        categoryId: 'cat-1',
+        month: '2026-09',
+        monthlyBudgetCents: 430000,
+      },
+    );
+  });
+
+  it('never calls addCategoryToMonth if createCategory fails', async () => {
+    mockedGraphqlRequest.mockRejectedValueOnce(new Error('network error'));
+
+    await expect(
+      createIncomeCategoryWithBudget('http://api.test', 'token-1', {
+        name: 'Obconnect',
+        icon: 'briefcase',
+        color: '#B8D8F0',
+        month: '2026-09',
+        monthlyBudgetCents: 430000,
       }),
     ).rejects.toThrow('network error');
 
@@ -229,6 +293,36 @@ describe('*MutationFn wiring (requestWithAuth)', () => {
       token,
       expect.stringContaining('createCategory'),
       expect.anything(),
+    );
+    expect(mockedGraphqlRequest).toHaveBeenNthCalledWith(
+      2,
+      expect.any(String),
+      token,
+      expect.stringContaining('addCategoryToMonth'),
+      expect.anything(),
+    );
+  });
+
+  it('createIncomeCategoryWithBudgetMutationFn routes both calls through requestWithAuth', async () => {
+    mockedGraphqlRequest.mockResolvedValueOnce({ createCategory: { id: 'cat-1' } });
+    mockedGraphqlRequest.mockResolvedValueOnce({ addCategoryToMonth: { id: 'cm-1' } });
+    const { requestWithAuth, token } = fakeRequestWithAuth();
+
+    await createIncomeCategoryWithBudgetMutationFn(requestWithAuth)({
+      name: 'Obconnect',
+      icon: 'briefcase',
+      color: '#B8D8F0',
+      month: '2026-09',
+      monthlyBudgetCents: 430000,
+    });
+
+    expect(requestWithAuth).toHaveBeenCalledTimes(1);
+    expect(mockedGraphqlRequest).toHaveBeenNthCalledWith(
+      1,
+      expect.any(String),
+      token,
+      expect.stringContaining('createCategory'),
+      expect.objectContaining({ input: expect.objectContaining({ direction: 'INCOME' }) }),
     );
     expect(mockedGraphqlRequest).toHaveBeenNthCalledWith(
       2,
