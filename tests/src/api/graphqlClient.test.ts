@@ -43,6 +43,11 @@ describe('isUnauthenticatedError', () => {
     expect(isUnauthenticatedError(new Error('network error'))).toBe(false);
   });
 
+  it('is false (not a throw) for a malformed response shape where errors is not an array', () => {
+    expect(isUnauthenticatedError({ response: { errors: 'not-an-array' } })).toBe(false);
+    expect(isUnauthenticatedError({ response: { errors: [null, 'nope', 42] } })).toBe(false);
+  });
+
   it('is false for null/undefined/non-object input', () => {
     expect(isUnauthenticatedError(null)).toBe(false);
     expect(isUnauthenticatedError(undefined)).toBe(false);

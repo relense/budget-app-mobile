@@ -304,7 +304,17 @@ default.
         `accessTokenIssuedAt` and a `TOKEN_REFRESHED` action, distinct from
         `SIGN_IN` (a mid-session rotation, not a fresh login) — an interface
         change to the reducer's state shape, flagged for the same reason as
-        above. 262 tests total across 33 suites.
+        above. Round-2 pr-reviewer fix: a refresh in flight had no
+        awareness of a concurrent `signOut()` -- if the user signed out
+        while a proactive (foreground-resume) or reactive refresh was still
+        pending, the late-arriving refresh would re-persist a fresh token
+        pair to SecureStore and dispatch back to `signedIn`, silently
+        resurrecting a session the user had just explicitly ended. Fixed
+        with a `sessionGenerationRef` bumped synchronously as the first
+        statement in `signOut()`; `refreshAccessToken` captures the
+        generation at the start of each attempt and discards its result
+        (no persist, no dispatch) if that generation has since moved on.
+        264 tests total across 33 suites.
 
 **Scaffold caveats worth knowing before the next `npm install` in this
 repo** (SDK 57 is very new — pin these deliberately, don't let npm grab

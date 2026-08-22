@@ -42,6 +42,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // refreshSession; the rest must await that same in-flight call instead of each trying to
   // rotate it independently, which would make every one but the first fail.
   const refreshPromiseRef = useRef<Promise<AuthTokens> | null>(null);
+  // Bumped synchronously the instant signOut() is called (before any of its own awaited work) --
+  // lets a refresh already in flight notice, once it resolves, that the session it was
+  // refreshing has since been explicitly ended, so it can discard its result instead of
+  // silently resurrecting a signed-out session (re-persisting a fresh token pair to SecureStore
+  // and dispatching back to signedIn after the user tapped "Sign out").
+  const sessionGenerationRef = useRef(0);
 
   useEffect(() => {
     async function bootstrap() {
@@ -107,6 +113,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function signOut() {
+    sessionGenerationRef.current += 1;
     if (state.status === 'signedIn') {
       try {
         await apiLogout(getApiUrl(), state.refreshToken);
@@ -135,9 +142,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return Promise.reject(new Error('not_signed_in'));
     }
 
+    const generationAtStart = sessionGenerationRef.current;
     const promise = (async () => {
       try {
         const rotated = await refreshSession(getApiUrl(), state.refreshToken);
+
+        if (sessionGenerationRef.current !== generationAtStart) {
+          // signOut() ran while this refresh was in flight -- the session this token pair
+          // belongs to no longer exists as far as the user's concerned. Don't persist or
+          // dispatch it; signOut() has already cleared storage and moved state to signedOut.
+          throw new Error('session_ended_during_refresh');
+        }
+
         try {
           await setStoredTokens(rotated);
         } catch (err) {
@@ -150,9 +166,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         dispatch({ type: 'TOKEN_REFRESHED', ...rotated, accessTokenIssuedAt: Date.now() });
         return rotated;
       } catch (err) {
-        console.warn('Token refresh: refresh token rejected, signing out', err);
-        await clearStoredTokens();
-        dispatch({ type: 'SIGN_OUT' });
+        // Only sign out on the refresh's own failure -- if the session already ended (caught
+        // above), signOut() has already done this and re-clearing/re-dispatching would just be
+        // redundant noise.
+        if (sessionGenerationRef.current === generationAtStart) {
+          console.warn('Token refresh: refresh token rejected, signing out', err);
+          await clearStoredTokens();
+          dispatch({ type: 'SIGN_OUT' });
+        }
         throw err;
       } finally {
         refreshPromiseRef.current = null;

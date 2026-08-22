@@ -245,6 +245,35 @@ describe('AuthProvider requestWithAuth', () => {
     await waitFor(() => expect(mockRequest).toHaveBeenCalledTimes(4));
     expect(mockedRefreshSession).toHaveBeenCalledTimes(1);
   });
+
+  it('does not resurrect a signed-out session when sign-out happens while a refresh is still in flight', async () => {
+    mockedLogout.mockResolvedValue(undefined);
+    mockRequest.mockRejectedValueOnce(unauthenticatedError);
+    let resolveRefresh: (tokens: { accessToken: string; refreshToken: string }) => void = () => {};
+    mockedRefreshSession.mockReturnValue(
+      new Promise((resolve) => {
+        resolveRefresh = resolve;
+      }),
+    );
+
+    await fireEvent.press(screen.getByTestId('makeRequest'));
+    await waitFor(() => expect(mockedRefreshSession).toHaveBeenCalledTimes(1));
+
+    // Sign out while that refresh is still pending.
+    await fireEvent.press(screen.getByTestId('signOut'));
+    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('signedOut'));
+    mockedSetStoredTokens.mockClear();
+
+    // Now let the stale refresh resolve, late.
+    await act(async () => {
+      resolveRefresh({ accessToken: 'late-access', refreshToken: 'late-refresh' });
+    });
+
+    // Must stay signed out -- not resurrected by the late-arriving refresh -- and must not
+    // re-persist a token pair for a session that was just explicitly ended.
+    expect(screen.getByTestId('status')).toHaveTextContent('signedOut');
+    expect(mockedSetStoredTokens).not.toHaveBeenCalled();
+  });
 });
 
 describe('AuthProvider proactive refresh on app foreground', () => {

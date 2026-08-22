@@ -21,7 +21,12 @@ export async function graphqlRequest<TResult, TVariables extends object = Record
 // expired, refresh and retry" apart from every other kind of failure.
 export function isUnauthenticatedError(err: unknown): boolean {
   if (!err || typeof err !== 'object') return false;
-  const response = (err as { response?: { errors?: { extensions?: { code?: string } }[] } })
-    .response;
-  return response?.errors?.some((error) => error.extensions?.code === 'UNAUTHENTICATED') ?? false;
+  const errors = (err as { response?: { errors?: unknown } }).response?.errors;
+  if (!Array.isArray(errors)) return false;
+  return errors.some(
+    (error) =>
+      !!error &&
+      typeof error === 'object' &&
+      (error as { extensions?: { code?: string } }).extensions?.code === 'UNAUTHENTICATED',
+  );
 }
