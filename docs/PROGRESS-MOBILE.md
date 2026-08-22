@@ -740,6 +740,24 @@ default.
       palette/picker tests were already icon-agnostic, aside from one
       `edit-category.test.tsx` assertion updated from `star`/`#EEF3C8`
       to `home`/`#EEF3C8`).
+- [x] Specific delete-blocked toast for `edit-category.tsx`, replacing
+      the generic "Something went wrong" message. `removeCategoryFromMonth`
+      throws `category_month_has_transactions` or
+      `category_month_has_recurring_expenses` (both uppercased into
+      `extensions.code` per the GraphQL error convention, see `SERVICES.md`)
+      when the category still has real data hanging off it — the user
+      correctly guessed the recurring-expense case exists but had no way
+      to tell it apart from a genuine failure, since both showed the same
+      generic copy. Added `hasGraphqlErrorCode(err, code)` to
+      `graphqlClient.ts` (`isUnauthenticatedError` now just calls it with
+      `'UNAUTHENTICATED'`, no behavior change) and used it in
+      `edit-category.tsx`'s delete catch block to show "This category has
+      transactions or recurring expenses linked to it. Delete those
+      first." for either code, generic copy for anything else. Scoped to
+      this screen only, per the user's report — `edit-recurring-expense.tsx`
+      already has its own client-side pre-check for its one blocking case
+      (paid transactions) and wasn't touched. 402 tests total across 41
+      suites.
 
 **Scaffold caveats worth knowing before the next `npm install` in this
 repo** (SDK 57 is very new — pin these deliberately, don't let npm grab

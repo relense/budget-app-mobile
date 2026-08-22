@@ -200,8 +200,54 @@ describe('EditCategoryScreen', () => {
     expect(mockedRouterBack).toHaveBeenCalled();
   });
 
-  it('shows a toast when the confirmed deletion fails (e.g. blocked by existing transactions)', async () => {
-    removeFromMonthMutateAsync.mockRejectedValue(new Error('category_month_has_transactions'));
+  it('shows a specific toast when deletion is blocked by existing transactions', async () => {
+    removeFromMonthMutateAsync.mockRejectedValue({
+      response: {
+        errors: [{ message: 'nope', extensions: { code: 'CATEGORY_MONTH_HAS_TRANSACTIONS' } }],
+      },
+    });
+    mockedAlert.mockImplementation((_title, _message, buttons) => {
+      const deleteButton = buttons?.find((button) => button.text === 'Delete');
+      deleteButton?.onPress?.();
+    });
+    await renderScreen();
+
+    await fireEvent.press(screen.getByTestId('delete-category-button'));
+
+    expect(
+      await screen.findByText(
+        'This category has transactions or recurring expenses linked to it. Delete those first.',
+      ),
+    ).toBeTruthy();
+    expect(mockedRouterBack).not.toHaveBeenCalled();
+  });
+
+  it('shows the same specific toast when deletion is blocked by a linked recurring expense', async () => {
+    removeFromMonthMutateAsync.mockRejectedValue({
+      response: {
+        errors: [
+          { message: 'nope', extensions: { code: 'CATEGORY_MONTH_HAS_RECURRING_EXPENSES' } },
+        ],
+      },
+    });
+    mockedAlert.mockImplementation((_title, _message, buttons) => {
+      const deleteButton = buttons?.find((button) => button.text === 'Delete');
+      deleteButton?.onPress?.();
+    });
+    await renderScreen();
+
+    await fireEvent.press(screen.getByTestId('delete-category-button'));
+
+    expect(
+      await screen.findByText(
+        'This category has transactions or recurring expenses linked to it. Delete those first.',
+      ),
+    ).toBeTruthy();
+    expect(mockedRouterBack).not.toHaveBeenCalled();
+  });
+
+  it('falls back to the generic toast for any other deletion failure', async () => {
+    removeFromMonthMutateAsync.mockRejectedValue(new Error('network error'));
     mockedAlert.mockImplementation((_title, _message, buttons) => {
       const deleteButton = buttons?.find((button) => button.text === 'Delete');
       deleteButton?.onPress?.();
