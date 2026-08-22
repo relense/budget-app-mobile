@@ -702,6 +702,29 @@ default.
       already applied to Edit's blank-due-day case (which falls back to
       the row's *original* value instead, since it has one). 396 tests
       total across 41 suites.
+- [x] Two `edit-category.tsx` fixes (this screen is shared by both
+      Available/Expense and Income category editing, reached via
+      swipe-to-edit on either Home tab). **Icon was not editable at
+      all** — it just displayed `params.icon` read-only. Made it
+      editable the same way `add-category.tsx`/`add-income.tsx` already
+      work: the icon pill is now a `Pressable` (with a chevron
+      indicating open/closed state) that opens an `IconPicker` overlay
+      scoped to the right palette (`EXPENSE_ICON_PALETTE` or
+      `INCOME_ICON_PALETTE`, chosen by `params.direction`); selecting an
+      icon updates local state and is sent to `updateCategory` on
+      confirm alongside the correctly re-derived color (`colorForIcon`/
+      `colorForIncomeIcon`) — this also fixed a latent bug where an
+      income category's fixed color was always looked up in the expense
+      palette, silently falling back to the wrong color for icons like
+      `briefcase`/`shield` that aren't in it. **Amount label always read
+      "Total budget"**, even for an income category — now reads
+      "Expected income" when `params.direction === 'INCOME'`. Also
+      proactively applied the same `nameFocused`-gated
+      keyboard-dismiss-overlay fix already made to the recurring-expense
+      screens (see above) here too, since this screen has the identical
+      overlay pattern and would have the identical latent bug even
+      though it hadn't been reported here specifically. 400 tests total
+      across 41 suites.
 
 **Scaffold caveats worth knowing before the next `npm install` in this
 repo** (SDK 57 is very new — pin these deliberately, don't let npm grab

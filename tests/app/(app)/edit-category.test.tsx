@@ -139,7 +139,7 @@ describe('EditCategoryScreen', () => {
       categoryId: 'c-1',
       name: 'Groceries',
       icon: 'cart',
-      color: '#4C6EF5',
+      color: '#CEF3C8',
       budgetType: 'NEED',
       direction: 'EXPENSE',
     });
@@ -212,6 +212,88 @@ describe('EditCategoryScreen', () => {
 
     expect(await screen.findByText('Something went wrong. Please try again.')).toBeTruthy();
     expect(mockedRouterBack).not.toHaveBeenCalled();
+  });
+
+  it('shows "Total budget" for an expense category and "Expected income" for an income category', async () => {
+    await renderScreen();
+    expect(screen.getByText('Total budget')).toBeTruthy();
+    expect(screen.queryByText('Expected income')).toBeNull();
+
+    mockedUseLocalSearchParams.mockReturnValue({
+      categoryMonthId: 'cm-1',
+      categoryId: 'c-2',
+      name: 'Salary',
+      icon: 'briefcase',
+      color: '#B8D8F0',
+      budgetType: null,
+      direction: 'INCOME',
+      monthlyBudgetCents: '70000',
+    });
+    await renderScreen();
+    expect(screen.getByText('Expected income')).toBeTruthy();
+  });
+
+  it('opens the icon picker on icon-pill tap and updates the icon on selection', async () => {
+    await renderScreen();
+
+    expect(screen.queryByTestId('icon-picker-grid')).toBeNull();
+
+    await fireEvent.press(screen.getByTestId('icon-pill'));
+    expect(screen.getByTestId('icon-picker-grid')).toBeTruthy();
+
+    await fireEvent.press(screen.getByTestId('icon-option-star'));
+    expect(screen.queryByTestId('icon-picker-grid')).toBeNull();
+
+    await fireEvent.press(screen.getByTestId('keypad-confirm'));
+
+    expect(updateCategoryMutateAsync).toHaveBeenCalledWith({
+      categoryId: 'c-1',
+      name: 'Shopping',
+      icon: 'star',
+      color: '#EEF3C8',
+      budgetType: 'NEED',
+      direction: 'EXPENSE',
+    });
+  });
+
+  it('offers only income icons for an income category, using the income palette color', async () => {
+    mockedUseLocalSearchParams.mockReturnValue({
+      categoryMonthId: 'cm-1',
+      categoryId: 'c-2',
+      name: 'Salary',
+      icon: 'briefcase',
+      color: '#B8D8F0',
+      budgetType: null,
+      direction: 'INCOME',
+      monthlyBudgetCents: '70000',
+    });
+    await renderScreen();
+
+    await fireEvent.press(screen.getByTestId('icon-pill'));
+    expect(screen.getByTestId('icon-option-briefcase')).toBeTruthy();
+    expect(screen.getByTestId('icon-option-shield')).toBeTruthy();
+    expect(screen.queryByTestId('icon-option-cart')).toBeNull();
+
+    await fireEvent.press(screen.getByTestId('icon-option-shield'));
+    await fireEvent.press(screen.getByTestId('keypad-confirm'));
+
+    expect(updateCategoryMutateAsync).toHaveBeenCalledWith({
+      categoryId: 'c-2',
+      name: 'Salary',
+      icon: 'shield',
+      color: '#F0C8D8',
+      budgetType: null,
+      direction: 'INCOME',
+    });
+  });
+
+  it('does not resend CategoryInput when neither name nor icon changed', async () => {
+    await renderScreen();
+
+    await fireEvent.press(screen.getByTestId('keypad-confirm'));
+
+    expect(updateCategoryMutateAsync).not.toHaveBeenCalled();
+    expect(updateBudgetMutateAsync).toHaveBeenCalled();
   });
 
   it('swallows the first tap outside the keyboard instead of also pressing what is underneath', async () => {

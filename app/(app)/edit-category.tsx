@@ -12,6 +12,7 @@ import {
 import type { BudgetType, Direction } from '../../src/api/types';
 import { AmountKeypad } from '../../src/components/AmountKeypad';
 import { CategoryIcon } from '../../src/components/CategoryIcon';
+import { IconPicker } from '../../src/components/IconPicker';
 import { Toast } from '../../src/components/Toast';
 import {
   amountTextToCents,
@@ -20,7 +21,12 @@ import {
   backspaceAmount,
   centsToAmountText,
 } from '../../src/lib/amountInput';
-import { colorForIcon } from '../../src/lib/categoryIconPalette';
+import {
+  EXPENSE_ICON_PALETTE,
+  INCOME_ICON_PALETTE,
+  colorForIcon,
+  colorForIncomeIcon,
+} from '../../src/lib/categoryIconPalette';
 import { useTheme } from '../../src/theme/ThemeProvider';
 
 const TOAST_DURATION_MS = 2500;
@@ -43,7 +49,11 @@ export default function EditCategoryScreen() {
   const updateCategory = useUpdateCategory();
   const removeFromMonth = useRemoveCategoryFromMonth();
 
+  const isIncome = params.direction === 'INCOME';
+
   const [name, setName] = useState(params.name);
+  const [icon, setIcon] = useState(params.icon);
+  const [iconPickerOpen, setIconPickerOpen] = useState(false);
   const [amountText, setAmountText] = useState(() =>
     centsToAmountText(Number(params.monthlyBudgetCents)),
   );
@@ -55,6 +65,12 @@ export default function EditCategoryScreen() {
   // empty field; backspace (which has no such guard) is unaffected either way.
   const [hasEditedAmount, setHasEditedAmount] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
+  // Same fix as add/edit-recurring-expense.tsx: the keyboard-dismiss-overlay below is meant
+  // only to eat a stray tap-to-dismiss landing on a keypad button underneath, but rendering it
+  // the instant the keyboard appears (the same moment the name field is tapped) sat it directly
+  // on top of the just-focused native TextInput. Gated on this so it never covers the field
+  // currently being typed into.
+  const [nameFocused, setNameFocused] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   useEffect(() => {
@@ -72,7 +88,9 @@ export default function EditCategoryScreen() {
     return () => clearTimeout(timer);
   }, [toastMessage]);
 
-  const color = colorForIcon(params.icon);
+  const iconPalette = isIncome ? INCOME_ICON_PALETTE : EXPENSE_ICON_PALETTE;
+  const color = isIncome ? colorForIncomeIcon(icon) : colorForIcon(icon);
+  const budgetLabel = isIncome ? 'Expected income' : 'Total budget';
   const canSubmit = !updateBudget.isPending && !updateCategory.isPending && name.trim().length > 0;
 
   function handleDigit(digit: string) {
@@ -106,14 +124,14 @@ export default function EditCategoryScreen() {
     if (!canSubmit) return;
     try {
       const trimmedName = name.trim();
-      if (trimmedName !== params.name) {
+      if (trimmedName !== params.name || icon !== params.icon) {
         // CategoryInput is a full replace, not a patch -- every field must be resent even
-        // though only the name actually changed here (see docs/PLAN.md).
+        // though only the name/icon actually changed here (see docs/PLAN.md).
         await updateCategory.mutateAsync({
           categoryId: params.categoryId,
           name: trimmedName,
-          icon: params.icon,
-          color: params.color,
+          icon,
+          color,
           budgetType: (params.budgetType || null) as BudgetType | null,
           direction: params.direction as Direction,
         });
@@ -152,18 +170,29 @@ export default function EditCategoryScreen() {
 
       <View style={[styles.content, { paddingBottom: insets.bottom + 16 }]}>
         <View style={styles.identityRow}>
-          <View style={[styles.iconPill, { backgroundColor: color }]}>
-            <CategoryIcon name={params.icon} color={colors.text.primary} />
-          </View>
+          <Pressable
+            testID="icon-pill"
+            style={[styles.iconPill, { backgroundColor: color }]}
+            onPress={() => setIconPickerOpen((current) => !current)}
+          >
+            <CategoryIcon name={icon} color={colors.text.primary} />
+            <MaterialCommunityIcons
+              name={iconPickerOpen ? 'chevron-up' : 'chevron-down'}
+              size={16}
+              color={colors.text.primary}
+            />
+          </Pressable>
           <TextInput
             testID="category-name-input"
             style={[styles.nameInput, { backgroundColor: colors.pill.textInputBackground }]}
             value={name}
             onChangeText={setName}
+            onFocus={() => setNameFocused(true)}
+            onBlur={() => setNameFocused(false)}
           />
         </View>
 
-        <Text style={[styles.budgetLabel, { color: colors.text.secondary }]}>Total budget</Text>
+        <Text style={[styles.budgetLabel, { color: colors.text.secondary }]}>{budgetLabel}</Text>
         <Text style={styles.amountRow}>
           <Text style={[styles.currencyPrefix, { color: colors.text.secondary }]}>€</Text>
           <Text style={[styles.amountText, { color: colors.text.primary }]}>
@@ -191,7 +220,32 @@ export default function EditCategoryScreen() {
         </Pressable>
       </View>
 
-      {keyboardVisible ? (
+      {iconPickerOpen ? (
+        <>
+          <Pressable
+            testID="icon-picker-backdrop"
+            style={[StyleSheet.absoluteFill, styles.overlayBackdrop]}
+            onPress={() => setIconPickerOpen(false)}
+          />
+          <View
+            style={[
+              styles.overlayCard,
+              { backgroundColor: colors.background.screen, borderColor: colors.segment.track },
+            ]}
+          >
+            <IconPicker
+              selectedIcon={icon}
+              palette={iconPalette}
+              onSelect={(selected) => {
+                setIcon(selected);
+                setIconPickerOpen(false);
+              }}
+            />
+          </View>
+        </>
+      ) : null}
+
+      {keyboardVisible && !nameFocused ? (
         // Same reasoning as the Add Category screen's keyboard-dismiss overlay: the first tap
         // outside a focused text input should only dismiss the keyboard, not also register as a
         // real press on whatever's underneath.
@@ -233,11 +287,13 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   iconPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
     height: 48,
     paddingHorizontal: 14,
     borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   nameInput: {
     flex: 1,
@@ -280,5 +336,19 @@ const styles = StyleSheet.create({
   },
   keyboardDismissOverlay: {
     zIndex: 20,
+  },
+  overlayBackdrop: {
+    zIndex: 9,
+  },
+  overlayCard: {
+    position: 'absolute',
+    top: 74,
+    left: 24,
+    right: 24,
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 8,
+    zIndex: 10,
+    elevation: 4,
   },
 });
