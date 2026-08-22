@@ -13,13 +13,18 @@ import {
   useRecurringExpenses,
   useTransactions,
 } from '../../../src/api/budgetHomeQueries';
+import { useMarkRecurringPaid } from '../../../src/api/recurringExpenseMutations';
 import { useAuth } from '../../../src/auth/AuthContext';
 import { ThemeProvider } from '../../../src/theme/ThemeProvider';
 import { router } from 'expo-router';
 import HomeScreen from '../../../app/(app)/index';
 
 jest.mock('../../../src/api/budgetHomeQueries');
+jest.mock('../../../src/api/recurringExpenseMutations');
 jest.mock('../../../src/auth/AuthContext');
+jest.mock('../../../src/lib/today', () => ({
+  todayIsoDate: () => '2026-09-15',
+}));
 
 // HomeScreen is rendered directly here, outside a real NavigationContainer, so the
 // context-based `useNavigation` hook has nothing to attach to -- stub it with a no-op listener
@@ -57,8 +62,10 @@ const mockedUseCategoryMonths = useCategoryMonths as jest.Mock;
 const mockedUseRecurringExpenses = useRecurringExpenses as jest.Mock;
 const mockedUseTransactions = useTransactions as jest.Mock;
 const mockedUseBankBalance = useBankBalance as jest.Mock;
+const mockedUseMarkRecurringPaid = useMarkRecurringPaid as jest.Mock;
 const mockedUseAuth = useAuth as jest.Mock;
 const mockSignOut = jest.fn();
+const markRecurringPaidMutateAsync = jest.fn();
 
 const idle = { data: undefined, isLoading: false, isError: false, refetch: jest.fn() };
 
@@ -232,6 +239,11 @@ beforeEach(() => {
       checkpointSetAt: '2026-01-01T00:00:00.000Z',
     },
   });
+  markRecurringPaidMutateAsync.mockResolvedValue(undefined);
+  mockedUseMarkRecurringPaid.mockReturnValue({
+    mutateAsync: markRecurringPaidMutateAsync,
+    isPending: false,
+  });
 });
 
 describe('HomeScreen', () => {
@@ -367,6 +379,47 @@ describe('HomeScreen', () => {
     expect(screen.getByText('New recurrent expense')).toBeTruthy();
     expect(screen.getByText('Water')).toBeTruthy();
     expect(screen.getByText('Unpaid')).toBeTruthy();
+  });
+
+  it('shows a WIP due-date placeholder under the name and Paid/Unpaid under the amount for every Recurrent row', async () => {
+    await renderHomeScreen();
+
+    await fireEvent.press(screen.getByText('Recurrent'));
+
+    expect(screen.getAllByText('WIP due date')).toHaveLength(2);
+    expect(screen.getByText('Unpaid')).toBeTruthy();
+    expect(screen.getByText('Paid')).toBeTruthy();
+  });
+
+  it('tapping the icon on an Unpaid Recurrent row marks it paid with the row\'s own amount, dated today', async () => {
+    await renderHomeScreen();
+
+    await fireEvent.press(screen.getByText('Recurrent'));
+    await fireEvent.press(screen.getByTestId('pay-icon-re-water'));
+
+    expect(markRecurringPaidMutateAsync).toHaveBeenCalledWith({
+      recurringExpenseId: 're-water',
+      amountCents: 2196,
+      date: '2026-09-15',
+    });
+  });
+
+  it('does not wire an icon tap handler on an already-Paid Recurrent row', async () => {
+    await renderHomeScreen();
+
+    await fireEvent.press(screen.getByText('Recurrent'));
+
+    expect(screen.queryByTestId('pay-icon-re-internet')).toBeNull();
+  });
+
+  it('shows a toast and does not crash when marking paid from the icon fails', async () => {
+    markRecurringPaidMutateAsync.mockRejectedValue(new Error('network error'));
+
+    await renderHomeScreen();
+    await fireEvent.press(screen.getByText('Recurrent'));
+    await fireEvent.press(screen.getByTestId('pay-icon-re-water'));
+
+    expect(await screen.findByText('Something went wrong. Please try again.')).toBeTruthy();
   });
 
   it('switches to the Income tab and shows both actual and expected amounts', async () => {

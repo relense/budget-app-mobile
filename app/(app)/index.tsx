@@ -11,12 +11,14 @@ import {
   useRecurringExpenses,
   useTransactions,
 } from '../../src/api/budgetHomeQueries';
+import { useMarkRecurringPaid } from '../../src/api/recurringExpenseMutations';
 import { useAuth } from '../../src/auth/AuthContext';
 import { AddRow } from '../../src/components/AddRow';
 import { CategoryIcon } from '../../src/components/CategoryIcon';
 import { ListRow } from '../../src/components/ListRow';
 import { RetryableError } from '../../src/components/RetryableError';
 import { SwipeableRow } from '../../src/components/SwipeableRow';
+import { Toast } from '../../src/components/Toast';
 import {
   mostRecentDate,
   sumActualCents,
@@ -25,6 +27,7 @@ import {
 } from '../../src/lib/budgetHomeCalculations';
 import { formatCents } from '../../src/lib/formatCents';
 import { formatDate, formatMonthLabel } from '../../src/lib/formatDate';
+import { todayIsoDate } from '../../src/lib/today';
 import { useTheme } from '../../src/theme/ThemeProvider';
 
 type Tab = 'AVAILABLE' | 'EXPENSES' | 'RECURRENT' | 'INCOME';
@@ -64,6 +67,12 @@ const TAB_LOAD_ERRORS: Record<Tab, string> = {
   INCOME: "Couldn't load your income.",
 };
 
+// Real due-date-per-row display isn't built yet -- see PLAN.md/PROGRESS-MOBILE.md -- a
+// literal placeholder rather than silently showing nothing.
+const DUE_DATE_PLACEHOLDER = 'WIP due date';
+const TOAST_DURATION_MS = 2500;
+const GENERIC_ERROR_MESSAGE = 'Something went wrong. Please try again.';
+
 // Bottom nav is drawn for visual completeness (matches the mockups) but isn't real navigation
 // yet -- only this screen was in scope for this pass, see docs/PROGRESS-MOBILE.md.
 const BOTTOM_NAV_ICONS = [
@@ -87,10 +96,19 @@ export default function HomeScreen() {
   // into each row's key below, so a row left swiped-open resets to closed instantly on remount
   // instead of via an animated close that could be seen racing the screen transition.
   const [listResetKey, setListResetKey] = useState(0);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   useEffect(() => {
     return navigation.addListener('focus', () => setListResetKey((key) => key + 1));
   }, [navigation]);
+
+  useEffect(() => {
+    if (!toastMessage) return;
+    const timer = setTimeout(() => setToastMessage(null), TOAST_DURATION_MS);
+    return () => clearTimeout(timer);
+  }, [toastMessage]);
+
+  const markRecurringPaid = useMarkRecurringPaid();
 
   const currentMonthQuery = useCurrentMonth();
   const month = currentMonthQuery.data?.month;
@@ -141,6 +159,22 @@ export default function HomeScreen() {
         : tab === 'RECURRENT'
           ? recurringExpenses
           : incomeCategoryMonths;
+
+  // Tapping a Recurrent row's icon marks it paid directly, one plain full-amount transaction
+  // dated today -- no amount/date adjustment, no split-payment support yet (that's deferred,
+  // see PROGRESS-MOBILE.md). Only wired for the unpaid->paid direction; unmarking still goes
+  // through the swipe-to-edit drawer's Paid/Unpaid pill.
+  async function handlePayFromIcon(recurringExpenseId: string, amountCents: number) {
+    try {
+      await markRecurringPaid.mutateAsync({
+        recurringExpenseId,
+        amountCents,
+        date: todayIsoDate(),
+      });
+    } catch {
+      setToastMessage(GENERIC_ERROR_MESSAGE);
+    }
+  }
 
   function renderRows() {
     if (tab === 'AVAILABLE') {
@@ -207,7 +241,6 @@ export default function HomeScreen() {
     }
     if (tab === 'RECURRENT') {
       return (recurringExpenses.data ?? []).map((re) => {
-        const date = mostRecentDate(re.transactions);
         return (
           <SwipeableRow
             key={`${re.id}-${listResetKey}`}
@@ -240,8 +273,17 @@ export default function HomeScreen() {
               }
               circleColor={re.paidThisMonth ? colors.status.paid.background : re.category.color}
               title={re.name}
-              subtitle={re.paidThisMonth ? (date ? formatDate(date) : 'Paid') : 'Unpaid'}
+              subtitle={DUE_DATE_PLACEHOLDER}
               amountText={formatCents(re.amountCents)}
+              secondaryAmountText={re.paidThisMonth ? 'Paid' : 'Unpaid'}
+              // Only wired when unpaid -- tapping the icon on an already-paid row does nothing
+              // here (unmarking is the swipe-to-edit drawer's job, via its Paid/Unpaid pill).
+              onIconPress={
+                re.paidThisMonth
+                  ? undefined
+                  : () => handlePayFromIcon(re.id, re.amountCents)
+              }
+              iconTestID={`pay-icon-${re.id}`}
             />
           </SwipeableRow>
         );
@@ -476,6 +518,8 @@ export default function HomeScreen() {
           );
         })}
       </View>
+
+      <Toast message={toastMessage} />
     </View>
   );
 }
