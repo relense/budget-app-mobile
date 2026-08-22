@@ -5,6 +5,8 @@ import {
   markRecurringPaidMutationFn,
   removeRecurringExpenseFromMonth,
   removeRecurringExpenseFromMonthMutationFn,
+  unmarkRecurringPaid,
+  unmarkRecurringPaidMutationFn,
   updateRecurringExpense,
   updateRecurringExpenseMutationFn,
 } from '../../../src/api/recurringExpenseMutations';
@@ -156,6 +158,46 @@ describe('markRecurringPaid', () => {
   });
 });
 
+describe('unmarkRecurringPaid', () => {
+  it('deletes every given transaction id', async () => {
+    mockedGraphqlRequest.mockResolvedValue({ deleteTransaction: true });
+
+    await unmarkRecurringPaid('http://api.test', 'token-1', ['t-1', 't-2']);
+
+    expect(mockedGraphqlRequest).toHaveBeenCalledWith(
+      'http://api.test',
+      'token-1',
+      expect.stringContaining('deleteTransaction'),
+      { id: 't-1' },
+    );
+    expect(mockedGraphqlRequest).toHaveBeenCalledWith(
+      'http://api.test',
+      'token-1',
+      expect.stringContaining('deleteTransaction'),
+      { id: 't-2' },
+    );
+  });
+
+  it('resolves cleanly with an empty list -- nothing to delete', async () => {
+    await expect(unmarkRecurringPaid('http://api.test', 'token-1', [])).resolves.toBeUndefined();
+    expect(mockedGraphqlRequest).not.toHaveBeenCalled();
+  });
+
+  it('throws (reporting how many failed) if even one delete fails, after still attempting every one', async () => {
+    mockedGraphqlRequest
+      .mockResolvedValueOnce({ deleteTransaction: true })
+      .mockRejectedValueOnce(new Error('network error'))
+      .mockResolvedValueOnce({ deleteTransaction: true });
+
+    await expect(
+      unmarkRecurringPaid('http://api.test', 'token-1', ['t-1', 't-2', 't-3']),
+    ).rejects.toThrow('Failed to delete 1 of 3 linked transactions');
+
+    // allSettled, not all -- every call was still attempted despite the middle one failing.
+    expect(mockedGraphqlRequest).toHaveBeenCalledTimes(3);
+  });
+});
+
 describe('*MutationFn wiring (requestWithAuth)', () => {
   it('createRecurringExpenseMutationFn routes the call through requestWithAuth', async () => {
     mockedGraphqlRequest.mockResolvedValueOnce({ createRecurringExpense: { id: 're-1' } });
@@ -234,6 +276,27 @@ describe('*MutationFn wiring (requestWithAuth)', () => {
       token,
       expect.stringContaining('markRecurringPaid'),
       expect.objectContaining({ id: 're-1' }),
+    );
+  });
+
+  it('unmarkRecurringPaidMutationFn routes every delete through the same requestWithAuth call', async () => {
+    mockedGraphqlRequest.mockResolvedValue({ deleteTransaction: true });
+    const { requestWithAuth, token } = fakeRequestWithAuth();
+
+    await unmarkRecurringPaidMutationFn(requestWithAuth)(['t-1', 't-2']);
+
+    expect(requestWithAuth).toHaveBeenCalledTimes(1);
+    expect(mockedGraphqlRequest).toHaveBeenCalledWith(
+      expect.any(String),
+      token,
+      expect.stringContaining('deleteTransaction'),
+      { id: 't-1' },
+    );
+    expect(mockedGraphqlRequest).toHaveBeenCalledWith(
+      expect.any(String),
+      token,
+      expect.stringContaining('deleteTransaction'),
+      { id: 't-2' },
     );
   });
 });

@@ -149,6 +149,35 @@ describe('IncomeReceivedScreen', () => {
     expect(mockedRouterBack).not.toHaveBeenCalled();
   });
 
+  it('shows a toast and does not navigate back when only some linked transactions fail to delete (partial clear)', async () => {
+    mockedUseLocalSearchParams.mockReturnValue({
+      ...receivedParams,
+      transactionIds: '["t-1","t-2"]',
+    });
+    deleteMutateAsync
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('network error'));
+
+    await renderScreen();
+    await fireEvent.press(screen.getByTestId('received-pill'));
+
+    expect(await screen.findByText('Something went wrong. Please try again.')).toBeTruthy();
+    expect(mockedRouterBack).not.toHaveBeenCalled();
+  });
+
+  it('still attempts to clear (with an empty array of deletes) and navigates back if Received but somehow no transaction ids are known', async () => {
+    // Data-integrity edge case (actualAmountCents > 0 but transactionIds empty) -- documents
+    // this doesn't silently no-op: there's simply nothing to delete, so it proceeds straight to
+    // navigating back rather than getting stuck.
+    mockedUseLocalSearchParams.mockReturnValue({ ...receivedParams, transactionIds: '[]' });
+
+    await renderScreen();
+    await fireEvent.press(screen.getByTestId('received-pill'));
+
+    expect(deleteMutateAsync).not.toHaveBeenCalled();
+    expect(mockedRouterBack).toHaveBeenCalledTimes(1);
+  });
+
   it('disables confirm when the amount is 0', async () => {
     mockedUseLocalSearchParams.mockReturnValue({ ...notReceivedParams, monthlyBudgetCents: '0' });
 

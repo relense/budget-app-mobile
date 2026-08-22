@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { useAuth, type RequestWithAuth } from '../auth/AuthContext';
 import { getApiUrl } from '../lib/apiUrl';
+import { deleteTransaction } from './transactionMutations';
 import { graphqlRequest } from './graphqlClient';
 import type { BudgetType } from './types';
 
@@ -143,6 +144,31 @@ export async function markRecurringPaid(
   });
 }
 
+// There is no backend "unmark paid" mutation -- markRecurringPaid only ever creates a
+// Transaction (see docs/SERVICES.md). Unmarking works by deleting every Transaction linked to
+// this recurring expense this month, using the ids CATEGORY_MONTHS_QUERY/
+// RECURRING_EXPENSES_QUERY now fetch. allSettled (not all) -- a partial failure (some deleted,
+// some not) must still surface as an error to the caller (so it doesn't wrongly navigate away
+// claiming success), but the ones that did succeed are real and shouldn't be hidden by the
+// same failure.
+export async function unmarkRecurringPaid(
+  baseUrl: string,
+  accessToken: string,
+  transactionIds: string[],
+): Promise<void> {
+  const results = await Promise.allSettled(
+    transactionIds.map((transactionId) =>
+      deleteTransaction(baseUrl, accessToken, { transactionId }),
+    ),
+  );
+  const failedCount = results.filter((r) => r.status === 'rejected').length;
+  if (failedCount > 0) {
+    throw new Error(
+      `Failed to delete ${failedCount} of ${transactionIds.length} linked transactions`,
+    );
+  }
+}
+
 // Plain, requestWithAuth-taking mutation functions -- see the comment above the queryFn
 // helpers in budgetHomeQueries.ts for why (unit-testable without renderHook).
 export function createRecurringExpenseMutationFn(requestWithAuth: RequestWithAuth) {
@@ -163,6 +189,11 @@ export function removeRecurringExpenseFromMonthMutationFn(requestWithAuth: Reque
 export function markRecurringPaidMutationFn(requestWithAuth: RequestWithAuth) {
   return (input: MarkRecurringPaidInput) =>
     requestWithAuth((token) => markRecurringPaid(getApiUrl(), token, input));
+}
+
+export function unmarkRecurringPaidMutationFn(requestWithAuth: RequestWithAuth) {
+  return (transactionIds: string[]) =>
+    requestWithAuth((token) => unmarkRecurringPaid(getApiUrl(), token, transactionIds));
 }
 
 // A new/changed/removed recurring expense changes recurringExpenses itself and
@@ -216,6 +247,29 @@ export function useMarkRecurringPaid() {
   return useMutation({
     mutationFn: markRecurringPaidMutationFn(requestWithAuth),
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['recurringExpenses'] });
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['categoryMonths'] });
+      queryClient.invalidateQueries({ queryKey: ['bankBalance'] });
+    },
+  });
+}
+
+// Same invalidation set as useMarkRecurringPaid, since this undoes exactly what that created --
+// deliberately using onSettled, not onSuccess: unmarkRecurringPaid throws on a partial failure
+// (some transactions deleted, some not), but the ones that did succeed are real and every query
+// this affects must still refetch to reflect that, not stay stale just because the whole batch
+// wasn't clean. useDeleteTransaction's own per-call invalidation doesn't cover
+// ['recurringExpenses'] (paidThisMonth), which is what this hook exists to fix -- a plain loop
+// of useDeleteTransaction calls from the screen silently left the Recurrent tab showing "Paid"
+// after unmarking, since nothing told that query to refetch.
+export function useUnmarkRecurringPaid() {
+  const { requestWithAuth } = useAuth();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: unmarkRecurringPaidMutationFn(requestWithAuth),
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['recurringExpenses'] });
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
       queryClient.invalidateQueries({ queryKey: ['categoryMonths'] });

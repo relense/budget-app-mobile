@@ -11,16 +11,15 @@ import { useCategories } from '../../../src/api/categoryQueries';
 import {
   useMarkRecurringPaid,
   useRemoveRecurringExpenseFromMonth,
+  useUnmarkRecurringPaid,
   useUpdateRecurringExpense,
 } from '../../../src/api/recurringExpenseMutations';
-import { useDeleteTransaction } from '../../../src/api/transactionMutations';
 import { ThemeProvider } from '../../../src/theme/ThemeProvider';
 import { router, useLocalSearchParams } from 'expo-router';
 import EditRecurringExpenseScreen from '../../../app/(app)/edit-recurring-expense';
 
 jest.mock('../../../src/api/categoryQueries');
 jest.mock('../../../src/api/recurringExpenseMutations');
-jest.mock('../../../src/api/transactionMutations');
 jest.mock('../../../src/lib/today', () => ({
   todayIsoDate: () => '2026-09-15',
 }));
@@ -32,15 +31,15 @@ jest.mock('expo-router', () => ({
 const mockedUseCategories = useCategories as jest.Mock;
 const mockedUseUpdateRecurringExpense = useUpdateRecurringExpense as jest.Mock;
 const mockedUseMarkRecurringPaid = useMarkRecurringPaid as jest.Mock;
+const mockedUseUnmarkRecurringPaid = useUnmarkRecurringPaid as jest.Mock;
 const mockedUseRemoveRecurringExpenseFromMonth = useRemoveRecurringExpenseFromMonth as jest.Mock;
-const mockedUseDeleteTransaction = useDeleteTransaction as jest.Mock;
 const mockedUseLocalSearchParams = useLocalSearchParams as jest.Mock;
 const mockedRouterBack = router.back as jest.Mock;
 
 const updateMutateAsync = jest.fn();
 const markPaidMutateAsync = jest.fn();
+const unmarkPaidMutateAsync = jest.fn();
 const removeMutateAsync = jest.fn();
-const deleteTransactionMutateAsync = jest.fn();
 
 const shoppingCategory = {
   id: 'c-shopping',
@@ -94,19 +93,19 @@ beforeEach(() => {
   });
   updateMutateAsync.mockResolvedValue(undefined);
   markPaidMutateAsync.mockResolvedValue(undefined);
+  unmarkPaidMutateAsync.mockResolvedValue(undefined);
   removeMutateAsync.mockResolvedValue(undefined);
-  deleteTransactionMutateAsync.mockResolvedValue(undefined);
   mockedUseUpdateRecurringExpense.mockReturnValue({
     mutateAsync: updateMutateAsync,
     isPending: false,
   });
   mockedUseMarkRecurringPaid.mockReturnValue({ mutateAsync: markPaidMutateAsync, isPending: false });
-  mockedUseRemoveRecurringExpenseFromMonth.mockReturnValue({
-    mutateAsync: removeMutateAsync,
+  mockedUseUnmarkRecurringPaid.mockReturnValue({
+    mutateAsync: unmarkPaidMutateAsync,
     isPending: false,
   });
-  mockedUseDeleteTransaction.mockReturnValue({
-    mutateAsync: deleteTransactionMutateAsync,
+  mockedUseRemoveRecurringExpenseFromMonth.mockReturnValue({
+    mutateAsync: removeMutateAsync,
     isPending: false,
   });
 });
@@ -148,7 +147,7 @@ describe('EditRecurringExpenseScreen', () => {
     expect(mockedRouterBack).toHaveBeenCalledTimes(1);
   });
 
-  it('tapping the pill while Paid deletes every linked transaction and goes back', async () => {
+  it('tapping the pill while Paid unmarks it via useUnmarkRecurringPaid with every linked transaction id, and goes back', async () => {
     mockedUseLocalSearchParams.mockReturnValue({
       ...baseParams,
       paidThisMonth: 'true',
@@ -159,9 +158,23 @@ describe('EditRecurringExpenseScreen', () => {
 
     await fireEvent.press(screen.getByTestId('paid-pill'));
 
-    expect(deleteTransactionMutateAsync).toHaveBeenCalledWith({ transactionId: 't-1' });
-    expect(deleteTransactionMutateAsync).toHaveBeenCalledWith({ transactionId: 't-2' });
+    expect(unmarkPaidMutateAsync).toHaveBeenCalledWith(['t-1', 't-2']);
     expect(mockedRouterBack).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows a toast and does not navigate back when unmarking paid fails (e.g. a partial delete failure)', async () => {
+    mockedUseLocalSearchParams.mockReturnValue({
+      ...baseParams,
+      paidThisMonth: 'true',
+      transactionIds: '["t-1","t-2"]',
+    });
+    unmarkPaidMutateAsync.mockRejectedValue(new Error('Failed to delete 1 of 2 linked transactions'));
+
+    await renderScreen();
+    await fireEvent.press(screen.getByTestId('paid-pill'));
+
+    expect(await screen.findByText('Something went wrong. Please try again.')).toBeTruthy();
+    expect(mockedRouterBack).not.toHaveBeenCalled();
   });
 
   it('lets the user edit name, category, Need/Want, due day, and amount, then saves via updateRecurringExpense', async () => {
@@ -191,6 +204,37 @@ describe('EditRecurringExpenseScreen', () => {
     expect(mockedRouterBack).toHaveBeenCalledTimes(1);
   });
 
+  it('rejects a due day of 0 -- confirm stays disabled', async () => {
+    await renderScreen();
+
+    await fireEvent.changeText(screen.getByTestId('due-day-input'), '0');
+
+    expect(screen.getByTestId('keypad-confirm').props.accessibilityState?.disabled).toBe(true);
+  });
+
+  it('rejects a second due-day digit that would push the value past 31', async () => {
+    await renderScreen();
+
+    await fireEvent.changeText(screen.getByTestId('due-day-input'), '3');
+    await fireEvent.changeText(screen.getByTestId('due-day-input'), '32');
+
+    expect(screen.getByTestId('due-day-input').props.value).toBe('3');
+  });
+
+  it('shows a hint toast instead of the delete confirm when Delete is pressed while Paid (blocked server-side)', async () => {
+    mockedUseLocalSearchParams.mockReturnValue({ ...baseParams, paidThisMonth: 'true' });
+    const alertSpy = jest.spyOn(Alert, 'alert');
+
+    await renderScreen();
+    await fireEvent.press(screen.getByTestId('delete-recurring-expense-button'));
+
+    expect(alertSpy).not.toHaveBeenCalled();
+    expect(removeMutateAsync).not.toHaveBeenCalled();
+    expect(await screen.findByText('Mark as unpaid before deleting.')).toBeTruthy();
+
+    alertSpy.mockRestore();
+  });
+
   it('deletes the recurring expense after confirming the destructive alert', async () => {
     const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation((_title, _msg, buttons) => {
       const destructive = buttons?.find((b) => b.style === 'destructive');
@@ -215,5 +259,23 @@ describe('EditRecurringExpenseScreen', () => {
 
     expect(await screen.findByText('Something went wrong. Please try again.')).toBeTruthy();
     expect(mockedRouterBack).not.toHaveBeenCalled();
+  });
+
+  it('still calls useUnmarkRecurringPaid (with an empty array) and navigates back if Paid but somehow no transaction ids are known', async () => {
+    // A data-integrity edge case (paidThisMonth true but transactionIds empty) rather than a
+    // normal path -- documents that this doesn't silently no-op: the mutation is still called
+    // (with []), and its own onSettled invalidation is what makes the Recurrent tab re-fetch
+    // and show whatever the server actually has, rather than this screen faking success.
+    mockedUseLocalSearchParams.mockReturnValue({
+      ...baseParams,
+      paidThisMonth: 'true',
+      transactionIds: '[]',
+    });
+
+    await renderScreen();
+    await fireEvent.press(screen.getByTestId('paid-pill'));
+
+    expect(unmarkPaidMutateAsync).toHaveBeenCalledWith([]);
+    expect(mockedRouterBack).toHaveBeenCalledTimes(1);
   });
 });

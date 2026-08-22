@@ -124,9 +124,19 @@ export default function IncomeReceivedScreen() {
     if (isMutating) return;
     try {
       if (received) {
-        await Promise.all(
+        // allSettled, not all -- a partial failure (some transactions deleted, some not) must
+        // still be reported as an error rather than navigating away claiming success, but each
+        // deleteTransaction call already invalidates ['categoryMonths'] on its own success (see
+        // transactionMutations.ts), so whichever ones did go through are already reflected --
+        // nothing extra to invalidate here on the failure path.
+        const results = await Promise.allSettled(
           transactionIds.map((transactionId) => deleteTransaction.mutateAsync({ transactionId })),
         );
+        const failedCount = results.filter((r) => r.status === 'rejected').length;
+        if (failedCount > 0) {
+          setToastMessage(GENERIC_ERROR_MESSAGE);
+          return;
+        }
         router.back();
       } else {
         await handleConfirm();

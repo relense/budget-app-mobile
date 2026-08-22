@@ -114,6 +114,29 @@ const incomeCategoryMonths = [
     },
     transactions: [{ id: 't-obconnect-1', date: '2026-09-01' }],
   },
+  // A second row with its own distinct, non-empty transaction ids -- so a regression that
+  // maps every row to the first row's transactions (e.g. reusing incomeCategoryMonths[0]
+  // instead of the row actually being rendered) is reachable by these tests, not just a
+  // single-row fixture where there's nothing to confuse it with.
+  {
+    id: 'cm-randstad',
+    month: '2026-09',
+    monthlyBudgetCents: 435708,
+    actualAmountCents: 333450,
+    recurringCommittedCents: 0,
+    category: {
+      id: 'c-randstad',
+      name: 'Randstad',
+      icon: 'briefcase',
+      color: '#F7D6DE',
+      budgetType: null,
+      direction: 'INCOME',
+    },
+    transactions: [
+      { id: 't-randstad-1', date: '2026-09-01' },
+      { id: 't-randstad-2', date: '2026-09-10' },
+    ],
+  },
 ];
 
 const recurringExpenses = [
@@ -134,6 +157,26 @@ const recurringExpenses = [
       direction: 'EXPENSE',
     },
     transactions: [],
+  },
+  // Same reasoning as cm-randstad above -- a second row with distinct, non-empty
+  // transaction ids of its own.
+  {
+    id: 're-internet',
+    month: '2026-09',
+    name: 'Internet',
+    amountCents: 5051,
+    budgetType: 'NEED',
+    dueDay: 12,
+    paidThisMonth: true,
+    category: {
+      id: 'c-shopping',
+      name: 'Shopping',
+      icon: 'cart',
+      color: '#4C6EF5',
+      budgetType: 'NEED',
+      direction: 'EXPENSE',
+    },
+    transactions: [{ id: 't-internet-1', date: '2026-09-12' }],
   },
 ];
 
@@ -415,6 +458,61 @@ describe('HomeScreen', () => {
         monthlyBudgetCents: '430000',
         actualAmountCents: '368600',
         transactionIds: '["t-obconnect-1"]',
+      },
+    });
+  });
+
+  it('maps each Income row to its own transaction ids, not the first row\'s (tap)', async () => {
+    await renderHomeScreen();
+
+    await fireEvent.press(screen.getByText('Income'));
+    await fireEvent.press(screen.getByTestId('income-row-cm-randstad'));
+
+    expect(mockedRouterPush).toHaveBeenCalledWith({
+      pathname: '/income-received',
+      params: {
+        categoryMonthId: 'cm-randstad',
+        name: 'Randstad',
+        icon: 'briefcase',
+        color: '#F7D6DE',
+        monthlyBudgetCents: '435708',
+        actualAmountCents: '333450',
+        transactionIds: '["t-randstad-1","t-randstad-2"]',
+      },
+    });
+  });
+
+  it('maps each Income row to its own transaction ids, not the first row\'s (swipe-edit)', async () => {
+    await renderHomeScreen();
+
+    await fireEvent.press(screen.getByText('Income'));
+    await fireEvent.press(screen.getByTestId('swipe-edit-action-cm-randstad'));
+
+    expect(mockedRouterPush).toHaveBeenCalledWith({
+      pathname: '/edit-category',
+      params: expect.objectContaining({ categoryMonthId: 'cm-randstad', categoryId: 'c-randstad' }),
+    });
+  });
+
+  it('maps each Recurrent row to its own transaction ids, not the first row\'s (swipe-edit)', async () => {
+    await renderHomeScreen();
+
+    await fireEvent.press(screen.getByText('Recurrent'));
+    await fireEvent.press(screen.getByTestId('swipe-edit-action-re-internet'));
+
+    expect(mockedRouterPush).toHaveBeenCalledWith({
+      pathname: '/edit-recurring-expense',
+      params: {
+        recurringExpenseId: 're-internet',
+        name: 'Internet',
+        amountCents: '5051',
+        categoryId: 'c-shopping',
+        categoryIcon: 'cart',
+        categoryColor: '#4C6EF5',
+        budgetType: 'NEED',
+        dueDay: '12',
+        paidThisMonth: 'true',
+        transactionIds: '["t-internet-1"]',
       },
     });
   });

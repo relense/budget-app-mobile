@@ -160,6 +160,16 @@ describe('AddRecurringExpenseScreen', () => {
     expect(screen.getByTestId('keypad-confirm').props.accessibilityState?.disabled).toBe(false);
   });
 
+  it('rejects a due day of 0 -- confirm stays disabled even with a name and amount set', async () => {
+    await renderScreen();
+
+    await fireEvent.changeText(screen.getByTestId('recurring-name-input'), 'Water');
+    await fireEvent.changeText(screen.getByTestId('due-day-input'), '0');
+    await fireEvent.press(screen.getByTestId('keypad-digit-5'));
+
+    expect(screen.getByTestId('keypad-confirm').props.accessibilityState?.disabled).toBe(true);
+  });
+
   it('rejects a second due-day digit that would push the value past 31', async () => {
     await renderScreen();
 

@@ -18,9 +18,9 @@ import { useCategories } from '../../src/api/categoryQueries';
 import {
   useMarkRecurringPaid,
   useRemoveRecurringExpenseFromMonth,
+  useUnmarkRecurringPaid,
   useUpdateRecurringExpense,
 } from '../../src/api/recurringExpenseMutations';
-import { useDeleteTransaction } from '../../src/api/transactionMutations';
 import type { BudgetType, Category } from '../../src/api/types';
 import { AmountKeypad } from '../../src/components/AmountKeypad';
 import { CategoryIcon } from '../../src/components/CategoryIcon';
@@ -69,8 +69,8 @@ export default function EditRecurringExpenseScreen() {
   const categoriesQuery = useCategories();
   const updateRecurringExpense = useUpdateRecurringExpense();
   const markRecurringPaid = useMarkRecurringPaid();
+  const unmarkRecurringPaid = useUnmarkRecurringPaid();
   const removeFromMonth = useRemoveRecurringExpenseFromMonth();
-  const deleteTransaction = useDeleteTransaction();
 
   const expenseCategories = (categoriesQuery.data ?? []).filter(
     (c) => c.direction === 'EXPENSE',
@@ -118,8 +118,10 @@ export default function EditRecurringExpenseScreen() {
   const dueDay = dueDayText === '' ? null : Number(dueDayText);
   const isDueDayValid = dueDay !== null && dueDay >= 1 && dueDay <= MAX_DUE_DAY;
   const isMutating =
-    updateRecurringExpense.isPending || markRecurringPaid.isPending || removeFromMonth.isPending ||
-    deleteTransaction.isPending;
+    updateRecurringExpense.isPending ||
+    markRecurringPaid.isPending ||
+    unmarkRecurringPaid.isPending ||
+    removeFromMonth.isPending;
 
   const canSubmit =
     !isMutating && name.trim().length > 0 && isDueDayValid && amountTextToCents(amountText) > 0;
@@ -161,9 +163,7 @@ export default function EditRecurringExpenseScreen() {
     if (isMutating) return;
     try {
       if (paid) {
-        await Promise.all(
-          transactionIds.map((transactionId) => deleteTransaction.mutateAsync({ transactionId })),
-        );
+        await unmarkRecurringPaid.mutateAsync(transactionIds);
       } else {
         await markRecurringPaid.mutateAsync({
           recurringExpenseId: params.recurringExpenseId,
@@ -195,6 +195,13 @@ export default function EditRecurringExpenseScreen() {
   }
 
   function handleDeletePress() {
+    // The backend blocks removeRecurringExpenseFromMonth while any Transaction references it
+    // (see docs/SERVICES.md) -- true for any bill currently marked Paid. Caught here with a
+    // clear message instead of letting it fail server-side into the generic error toast.
+    if (paid) {
+      setToastMessage('Mark as unpaid before deleting.');
+      return;
+    }
     Alert.alert(
       'Delete recurring expense',
       `Delete "${name}"? This can't be undone.`,
@@ -339,7 +346,10 @@ export default function EditRecurringExpenseScreen() {
 
         <Pressable
           testID="delete-recurring-expense-button"
-          style={[styles.deleteButton, { backgroundColor: colors.button.deleteBackground }]}
+          style={[
+            styles.deleteButton,
+            { backgroundColor: colors.button.deleteBackground, opacity: paid ? 0.4 : 1 },
+          ]}
           onPress={handleDeletePress}
         >
           <MaterialCommunityIcons name="trash-can-outline" size={18} color={colors.text.onDark} />
