@@ -46,10 +46,10 @@ export default function AddTransactionScreen() {
   const currentMonthQuery = useCurrentMonth();
   const month = currentMonthQuery.data?.month;
   const expenseCategoryMonths = useCategoryMonths(month, 'EXPENSE');
-  // Only consulted for its [0] entry, to default the category pill to whatever category the
-  // latest-dated transaction this month used (see selectedCategoryMonth below) --
+  // Only consulted for its first EXPENSE entry, to default the category pill to whatever
+  // category the latest-dated transaction this month used (see selectedCategoryMonth below) --
   // transactions(month) is ordered date DESC, createdAt DESC (see docs/SERVICES.md): date is
-  // the primary key, createdAt only breaks ties within the same date. So [0] is the most
+  // the primary key, createdAt only breaks ties within the same date. So that's the most
   // recently *dated* transaction, not necessarily the most recently *entered* one -- a
   // backdated entry (logging a purchase from a few days ago) won't become the default even
   // though it was just created. The API doesn't expose createdAt to this client at all
@@ -94,7 +94,14 @@ export default function AddTransactionScreen() {
   const catalogReady = !isCatalogLoading && !isCatalogError && !!month;
 
   const categoryMonths = expenseCategoryMonths.data ?? [];
-  const mostRecentTransactionCategoryMonthId = transactionsQuery.data?.[0]?.categoryMonth.id;
+  // transactionsQuery includes both directions (income and expense) -- this screen only ever
+  // creates EXPENSE transactions, and categoryMonths above is EXPENSE-only, so skip past any
+  // income entries (e.g. a salary logged today, groceries logged yesterday) instead of taking
+  // whichever direction happens to be dated latest. .find preserves the query's own date-DESC
+  // ordering rather than filtering the whole list just to read one entry.
+  const mostRecentTransactionCategoryMonthId = transactionsQuery.data?.find(
+    (t) => t.direction === 'EXPENSE',
+  )?.categoryMonth.id;
   const selectedCategoryMonth =
     categoryMonths.find((cm) => cm.id === selectedCategoryMonthId) ??
     categoryMonths.find((cm) => cm.id === mostRecentTransactionCategoryMonthId) ??

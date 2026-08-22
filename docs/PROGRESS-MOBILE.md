@@ -385,6 +385,47 @@ default.
       `['transactions', month]` cache), but a real added wait in a cold-start
       path that skips Home (e.g. a very fast tap before Home's own fetch
       lands). 270 tests total across 33 suites.
+- [x] `test-auditor` + `codebase-auditor` pass, and fixes for both.
+      **test-auditor**: verdict "tests trustworthy," one real gap — none of
+      the ~14 query/mutation hooks (`budgetHomeQueries.ts`,
+      `categoryQueries.ts`, `categoryMutations.ts`,
+      `transactionMutations.ts`) were verified to actually route through
+      `requestWithAuth`, since every screen test mocks the whole API module
+      away; a regression reverting a hook to call the API directly would
+      slip through undetected. Fixed by extracting each `queryFn`/
+      `mutationFn` body into its own plain, exported function that takes
+      `requestWithAuth` as a parameter (same reasoning `graphqlRequest`
+      already takes `accessToken` explicitly, see `graphqlClient.ts`) —
+      e.g. `currentMonthQueryFn(requestWithAuth)`,
+      `createTransactionMutationFn(requestWithAuth)` — so a test can pass a
+      mock and assert it was actually called, without `renderHook` (which
+      hangs combined with `useQuery` in this environment). `AuthContext.tsx`
+      exports the `RequestWithAuth` type for this. New test files
+      `budgetHomeQueries.test.ts`/`categoryQueries.test.ts`, and new
+      describe blocks in the existing `categoryMutations.test.ts`/
+      `transactionMutations.test.ts`, cover all ~14 — each was verified to
+      actually fail if the wiring is bypassed (spot-checked by temporarily
+      hardcoding a token past `requestWithAuth` in one function and
+      confirming its test fails, then restoring it).
+      **codebase-auditor**: one real bug, one stale comment, one dead
+      export. (1) **Bug**: the last-used-category default in
+      `add-transaction.tsx` took `transactionsQuery.data?.[0]` — *all*
+      transactions this month, income included — while `categoryMonths` is
+      EXPENSE-only; if the month's most-recently-dated transaction happened
+      to be income (e.g. today's salary, yesterday's groceries), the
+      category lookup silently missed and fell through to the first-in-list
+      default instead of finding the actual last-used expense category.
+      Fixed with `.find(t => t.direction === 'EXPENSE')` instead of `[0]`
+      (this screen only ever creates EXPENSE transactions), covered by a
+      new regression test verified to fail without the fix. (2) Dropped a
+      comment clause in `transactionMutations.ts` still referencing the
+      Expenses tab's per-row percent, removed in an earlier pass (see
+      above) — comment no longer describes anything the code shows. (3)
+      Deleted `percentSpent` (`budgetHomeCalculations.ts`) and its test —
+      zero remaining callers after the row-layout-tweaks pass removed
+      `ListRow`'s `percentText` prop, the thing it computed the value for;
+      left orphaned at the time rather than cleaned up alongside it. 284
+      tests total across 35 suites.
 
 **Scaffold caveats worth knowing before the next `npm install` in this
 repo** (SDK 57 is very new — pin these deliberately, don't let npm grab

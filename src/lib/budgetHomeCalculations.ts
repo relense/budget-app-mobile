@@ -15,12 +15,6 @@ export function sumRecurringCents(recurringExpenses: RecurringExpense[]): number
   return recurringExpenses.reduce((total, re) => total + re.amountCents, 0);
 }
 
-// monthlyBudgetCents of 0 has nothing to compute a percentage against -- 0%, not NaN/Infinity.
-export function percentSpent(actualAmountCents: number, monthlyBudgetCents: number): number {
-  if (monthlyBudgetCents === 0) return 0;
-  return Math.round((actualAmountCents / monthlyBudgetCents) * 100);
-}
-
 // Dates are bare YYYY-MM-DD strings (see CLAUDE.md's dates convention) -- lexicographic
 // comparison is correct for finding the max without any date parsing.
 export function mostRecentDate(transactions: TransactionDate[]): string | null {

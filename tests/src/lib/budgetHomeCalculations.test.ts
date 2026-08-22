@@ -1,6 +1,5 @@
 import {
   mostRecentDate,
-  percentSpent,
   sumActualCents,
   sumAvailableBudgetedCents,
   sumRecurringCents,
@@ -80,16 +79,6 @@ describe('sumRecurringCents', () => {
       recurringExpense({ amountCents: 41600, paidThisMonth: true }),
     ];
     expect(sumRecurringCents(res)).toBe(2196 + 41600);
-  });
-});
-
-describe('percentSpent', () => {
-  it('computes actual/budget as a rounded percentage', () => {
-    expect(percentSpent(194, 700)).toBe(28);
-  });
-
-  it('returns 0 when the budget is 0, not NaN/Infinity', () => {
-    expect(percentSpent(500, 0)).toBe(0);
   });
 });
 
