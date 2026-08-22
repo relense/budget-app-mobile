@@ -13,6 +13,7 @@ import {
   useUpdateCategoryMonthBudget,
 } from '../../../src/api/categoryMutations';
 import { useDeleteTransaction } from '../../../src/api/transactionMutations';
+import { lightColors } from '../../../src/theme/colors';
 import { ThemeProvider } from '../../../src/theme/ThemeProvider';
 import { router, useLocalSearchParams } from 'expo-router';
 import EditCategoryScreen from '../../../app/(app)/edit-category';
@@ -522,15 +523,22 @@ describe('EditCategoryScreen', () => {
       });
       await renderScreen();
 
+      const flatten = (style: unknown) => ([] as unknown[]).concat(style).filter(Boolean);
+      const colorOf = (testId: string) =>
+        (flatten(screen.getByTestId(testId).props.style) as Record<string, unknown>[]).find(
+          (s) => 'color' in s,
+        )?.color;
+
       await fireEvent.press(screen.getByTestId('keypad-backspace'));
 
       const amountValue = screen.getByTestId('amount-value');
       expect(amountValue.props.children).toBe('200.00');
-      const flatten = (style: unknown) => ([] as unknown[]).concat(style).filter(Boolean);
-      const color = (flatten(amountValue.props.style) as Record<string, unknown>[]).find(
-        (s) => 'color' in s,
-      )?.color;
-      expect(color).not.toBeUndefined();
+      expect(colorOf('amount-value')).toBe(lightColors.text.placeholder);
+
+      // Typing a real digit replaces the placeholder value and its color switches back to
+      // primary -- proving the gray isn't just a hardcoded default that never changes.
+      await fireEvent.press(screen.getByTestId('keypad-digit-5'));
+      expect(colorOf('amount-value')).toBe(lightColors.text.primary);
     });
 
     it('disables Confirm once the typed amount drops below the recurring-expense total', async () => {

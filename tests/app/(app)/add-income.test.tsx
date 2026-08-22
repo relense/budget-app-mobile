@@ -212,6 +212,21 @@ describe('AddIncomeScreen', () => {
     expect(mockedRouterBack).toHaveBeenCalledTimes(1);
   });
 
+  it('allows creating a new income category with the amount left at €0 -- a placeholder budget to fill in later is a deliberate, allowed state, same as add-category.tsx', async () => {
+    await renderScreen();
+
+    await fireEvent.changeText(screen.getByTestId('income-name-input'), 'Randstad');
+    // Amount field is never touched -- confirm is enabled purely on the name being set.
+    expect(screen.getByTestId('keypad-confirm').props.accessibilityState?.disabled).toBe(false);
+
+    await fireEvent.press(screen.getByTestId('keypad-confirm'));
+
+    expect(createMutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'Randstad', monthlyBudgetCents: 0 }),
+    );
+    expect(mockedRouterBack).toHaveBeenCalledTimes(1);
+  });
+
   it('blocks creating a duplicate-named income category and shows a toast instead', async () => {
     mockedUseCategories.mockReturnValue({
       data: [obconnectCategory, shoppingCategory],

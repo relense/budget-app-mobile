@@ -392,6 +392,29 @@ describe('EditRecurringExpenseScreen', () => {
     expect(screen.getByTestId('due-day-value').props.children).toBe('3');
   });
 
+  it('the decimal-point key is a no-op while in day-entry mode', async () => {
+    await renderScreen();
+
+    await fireEvent.press(screen.getByTestId('keypad-toggle-date'));
+    await fireEvent.press(screen.getByTestId('keypad-digit-1'));
+    await fireEvent.press(screen.getByTestId('keypad-decimal-point'));
+    await fireEvent.press(screen.getByTestId('keypad-digit-0'));
+
+    expect(screen.getByTestId('due-day-value').props.children).toBe('10');
+  });
+
+  it('pressing the decimal point first replaces the pre-filled amount too', async () => {
+    await renderScreen();
+
+    // Same "first key clears the pre-filled value" guard as the digit/backspace handlers --
+    // the pre-filled 21.96 already has 2 decimal digits, which appendDecimalPoint would
+    // otherwise refuse to touch.
+    await fireEvent.press(screen.getByTestId('keypad-decimal-point'));
+    await fireEvent.press(screen.getByTestId('keypad-digit-5'));
+
+    expect(screen.getByTestId('calculator-value').props.children).toBe('0.5');
+  });
+
   it('pressing delete on the pre-filled due day clears it to blank (placeholder), not a no-op', async () => {
     await renderScreen();
 

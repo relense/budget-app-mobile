@@ -882,6 +882,42 @@ default.
       tradeoff.) 428 tests total across 42 suites (3 new: retry-only-
       failed-ids, the Paid-pill-uses-saved-amount case, plus 4 existing
       navigation-param assertions updated for the new `categoryName` param).
+      Also fixed a trivial stale-comment nitpick from that same review pass
+      (two comments still said `filterUnusedExpenseCategories`, the old
+      name before that helper was generalized with a `direction` param).
+- [x] `test-auditor` pass on the branch, three real gaps fixed. **Weak
+      placeholder-color assertion**: `edit-category.test.tsx`'s "clearing
+      the amount shows the recurring-expense total as a gray placeholder"
+      test only checked `color` wasn't `undefined` — passes even if the
+      wrong color were wired up. Now compares against the real
+      `lightColors.text.placeholder`/`lightColors.text.primary` values
+      (imported from `src/theme/colors.ts`), and also asserts the color
+      switches back to primary once a real digit is typed. **Missing
+      decimal-point coverage on the edit screen**: `add-recurring-expense.test.tsx`
+      already tested the decimal key being a no-op in day-entry mode;
+      `edit-recurring-expense.test.tsx` had no decimal-point test at all,
+      for either day-entry-mode (no-op) or amount-mode (first-touch
+      replaces the pre-filled value) — both added, mirroring the sibling
+      screen's test and `edit-category.test.tsx`'s equivalent pattern.
+      **`add-income.tsx` allows a €0 budget with no test proving it's
+      intentional**: `canSubmit` there never checks amount > 0, which
+      looked like a possible gap in isolation — traced it against
+      `add-category.tsx` (`canSubmit` there is byte-for-byte the same
+      shape, no amount check either) and confirmed this is deliberate,
+      pre-existing, app-wide behavior for *category* creation specifically
+      (a €0 placeholder budget to fill in later), distinct from recurring
+      expenses (`add-recurring-expense.tsx`), which do require amount > 0
+      since a €0 bill makes no sense. No behavior changed — added a test
+      documenting/locking in the €0-is-allowed case instead. (Two other
+      findings were noted but not acted on: hook-level `invalidateQueries`
+      sets in `recurringExpenseMutations.ts`/`categoryMutations.ts` have
+      zero direct test coverage, but that's a pre-existing, repo-wide
+      convention predating this PR, not something to unilaterally change;
+      and the `categoryName` param fix from the prior round has no
+      observable regression test since nothing in the screen currently
+      reads `selectedCategory.name` — correctly flagged as "nothing to
+      assert on yet" rather than a real gap.) 431 tests total across 42
+      suites (3 new).
 
 **Scaffold caveats worth knowing before the next `npm install` in this
 repo** (SDK 57 is very new — pin these deliberately, don't let npm grab
