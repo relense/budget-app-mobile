@@ -47,6 +47,7 @@ const RECURRING_EXPENSES_QUERY = `
       amountCents
       budgetType
       dueDay
+      dueDate
       paidThisMonth
       category {
         id

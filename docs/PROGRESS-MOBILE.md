@@ -628,8 +628,22 @@ default.
       just a bare Int with no stored month/year. Both Add and Edit now
       fetch `useCurrentMonth()` (Edit didn't before) to get that context.
       398 tests total across 42 suites.
-
-**Scaffold caveats worth knowing before the next `npm install` in this
+- [x] Wired the real `RecurringExpense.dueDate` now that the backend has
+      it — the user updated `docs/PLAN.md`/`docs/SERVICES.md` directly
+      (not part of any mobile PR) to add a computed field: `dueDate`
+      (bare `YYYY-MM-DD`) resolves the stored `dueDay` (still just an
+      Int, 1-31, no stored month/year) against the row's own month,
+      clamped to that month's last real day if `dueDay` doesn't fit.
+      `RECURRING_EXPENSES_QUERY` now fetches it, `RecurringExpense` (the
+      client type) gained the field, and the Recurrent tab's row
+      subtitle — a literal "WIP due date" placeholder since that bullet
+      above — now shows `formatDate(re.dueDate)`, the same formatter
+      already used for the Income/Expenses tabs' date subtitles. Add/Edit
+      Recurring Expense's own due-day entry is unaffected: it's still a
+      live, user-typed value (client-computed day + month/year label, see
+      above) since `dueDate` is a read-only computed field, not something
+      `updateRecurringExpense`/`createRecurringExpense` accept. 398 tests
+      total across 42 suites (one test's assertion changed, not added).
 repo** (SDK 57 is very new — pin these deliberately, don't let npm grab
 latest):
 

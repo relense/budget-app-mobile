@@ -34,6 +34,7 @@ function recurringExpense(overrides: Partial<RecurringExpense> = {}): RecurringE
     amountCents: 2196,
     budgetType: 'NEED',
     dueDay: 10,
+    dueDate: '2026-08-10',
     paidThisMonth: false,
     category: {
       id: 'c1',

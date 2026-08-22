@@ -71,9 +71,6 @@ const TAB_LOAD_ERRORS: Record<Tab, string> = {
   INCOME: "Couldn't load your income.",
 };
 
-// Real due-date-per-row display isn't built yet -- see PLAN.md/PROGRESS-MOBILE.md -- a
-// literal placeholder rather than silently showing nothing.
-const DUE_DATE_PLACEHOLDER = 'WIP due date';
 const TOAST_DURATION_MS = 2500;
 const GENERIC_ERROR_MESSAGE = 'Something went wrong. Please try again.';
 
@@ -284,7 +281,7 @@ export default function HomeScreen() {
               }
               circleColor={re.paidThisMonth ? colors.status.paid.background : re.category.color}
               title={re.name}
-              subtitle={DUE_DATE_PLACEHOLDER}
+              subtitle={formatDate(re.dueDate)}
               amountText={formatCents(re.amountCents)}
               secondaryAmountText={re.paidThisMonth ? 'Paid' : 'Unpaid'}
               // Toggles both directions -- see handleToggleIconPaid.

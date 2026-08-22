@@ -159,6 +159,7 @@ const recurringExpenses = [
     amountCents: 2196,
     budgetType: 'NEED',
     dueDay: 10,
+    dueDate: '2026-09-10',
     paidThisMonth: false,
     category: {
       id: 'c-shopping',
@@ -179,6 +180,7 @@ const recurringExpenses = [
     amountCents: 5051,
     budgetType: 'NEED',
     dueDay: 12,
+    dueDate: '2026-09-12',
     paidThisMonth: true,
     category: {
       id: 'c-shopping',
@@ -391,12 +393,13 @@ describe('HomeScreen', () => {
     expect(screen.getByText('Unpaid')).toBeTruthy();
   });
 
-  it('shows a WIP due-date placeholder under the name and Paid/Unpaid under the amount for every Recurrent row', async () => {
+  it('shows the real computed due date under the name and Paid/Unpaid under the amount for every Recurrent row', async () => {
     await renderHomeScreen();
 
     await fireEvent.press(screen.getByText('Recurrent'));
 
-    expect(screen.getAllByText('WIP due date')).toHaveLength(2);
+    expect(screen.getByText('10 September 2026')).toBeTruthy();
+    expect(screen.getByText('12 September 2026')).toBeTruthy();
     expect(screen.getByText('Unpaid')).toBeTruthy();
     expect(screen.getByText('Paid')).toBeTruthy();
   });
