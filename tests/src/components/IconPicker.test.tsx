@@ -30,6 +30,15 @@ describe('IconPicker', () => {
     expect(onSelect).toHaveBeenCalledWith('heart');
   });
 
+  it('centers each row of icons instead of leaving a ragged gap on the right', async () => {
+    await renderPicker();
+
+    const style = ([] as unknown[])
+      .concat(screen.getByTestId('icon-picker-grid').props.style)
+      .filter(Boolean) as Record<string, unknown>[];
+    expect(style.some((s) => s.justifyContent === 'center')).toBe(true);
+  });
+
   it('outlines the selected icon instead of changing its fill color', async () => {
     await renderPicker({ selectedIcon: 'heart' });
 
