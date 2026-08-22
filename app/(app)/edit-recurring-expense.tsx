@@ -39,23 +39,21 @@ import {
   formatTypedDueDay,
   isValidDueDay,
 } from '../../src/lib/dueDayInput';
+import { budgetTypeForCategory } from '../../src/lib/recurringBudgetType';
 import { todayIsoDate } from '../../src/lib/today';
 import { useTheme } from '../../src/theme/ThemeProvider';
-
-const BUDGET_TYPES: { key: Extract<BudgetType, 'NEED' | 'WANT'>; label: string }[] = [
-  { key: 'NEED', label: 'Need' },
-  { key: 'WANT', label: 'Want' },
-];
 
 const DUE_DAY_PLACEHOLDER = 'Due date day';
 const TOAST_DURATION_MS = 2500;
 const GENERIC_ERROR_MESSAGE = 'Something went wrong. Please try again.';
 
-// Reached only by swiping a Recurrent row (same SwipeableRow pattern as Available/Expenses,
-// tapping the row itself does nothing) -- combines everything the mockup's keypad screen shows
-// (Paid/Unpaid pill, amount, Delete) with full editing of name/category/Need-Want/due-day,
-// which the mockup doesn't show fields for but the user asked to be able to change without
-// deleting and re-adding the bill.
+// Reached only by swiping a Recurrent row (same SwipeableRow pattern as Available/Expenses --
+// tapping a row's icon marks it paid directly from Home, see index.tsx, and tapping the rest
+// of the row does nothing). Combines the mockup's keypad screen (Paid/Unpaid pill, amount,
+// Delete) with editing name/category/due-day -- the mockup doesn't show fields for those, but
+// the user asked to be able to change them without deleting and re-adding the bill.
+// Need/Want is deliberately not editable here (or on Add): it's derived from the chosen
+// category via budgetTypeForCategory, not asked for separately.
 export default function EditRecurringExpenseScreen() {
   const { colors, typography } = useTheme();
   const insets = useSafeAreaInsets();
@@ -92,16 +90,14 @@ export default function EditRecurringExpenseScreen() {
     budgetType: (params.budgetType as BudgetType) ?? null,
     direction: 'EXPENSE',
   });
-  const [budgetType, setBudgetType] = useState<Extract<BudgetType, 'NEED' | 'WANT'>>(
-    params.budgetType === 'WANT' ? 'WANT' : 'NEED',
-  );
-  // Same split as add-recurring-expense.tsx/add-transaction.tsx's date entry: `committedDueDay`
-  // is the last value actually landed on (pre-filled from params here), `dueDayDigits` is a
-  // scratch buffer that resets to '' every time day-entry mode is (re-)entered, so the first
-  // digit typed always starts fresh instead of appending onto the pre-filled value -- the
-  // display falls back to `committedDueDay` only while the buffer is still empty.
-  const [committedDueDay, setCommittedDueDay] = useState(params.dueDay);
-  const [dueDayDigits, setDueDayDigits] = useState('');
+  // Same "first touch replaces/clears the pre-filled value outright" pattern as the amount
+  // field below (hasEditedAmount) -- dueDayDigits starts pre-filled from params, and the first
+  // digit or backspace press in day-entry mode either replaces it wholesale or clears it to
+  // blank; after that, digits/backspace behave normally on the live value. This is also why a
+  // save with the field left blank has to fall back to the original due day rather than being
+  // blocked -- see handleConfirm.
+  const [dueDayDigits, setDueDayDigits] = useState(params.dueDay);
+  const [hasEditedDueDay, setHasEditedDueDay] = useState(false);
   const [amountText, setAmountText] = useState(() => centsToAmountText(Number(params.amountCents)));
   // Same "first key clears the pre-filled value" guard as edit-category.tsx -- the pre-filled
   // amount always has 2 decimal digits already, which appendDigit/appendDecimalPoint treat as
@@ -130,19 +126,24 @@ export default function EditRecurringExpenseScreen() {
     return () => clearTimeout(timer);
   }, [toastMessage]);
 
-  const dueDayDisplayDigits = dueDayDigits === '' ? committedDueDay : dueDayDigits;
-  const dueDay = isValidDueDay(dueDayDisplayDigits) ? Number(dueDayDisplayDigits) : null;
+  const dueDay = isValidDueDay(dueDayDigits) ? Number(dueDayDigits) : null;
   const isMutating =
     updateRecurringExpense.isPending ||
     markRecurringPaid.isPending ||
     unmarkRecurringPaid.isPending ||
     removeFromMonth.isPending;
 
-  const canSubmit =
-    !isMutating && name.trim().length > 0 && dueDay !== null && amountTextToCents(amountText) > 0;
+  // Due day is deliberately not required here (unlike Add) -- leaving it blank and saving
+  // falls back to the original value instead of blocking the save, see handleConfirm.
+  const canSubmit = !isMutating && name.trim().length > 0 && amountTextToCents(amountText) > 0;
 
   function handleDigit(digit: string) {
     if (dateMode) {
+      if (!hasEditedDueDay) {
+        setHasEditedDueDay(true);
+        setDueDayDigits(digit);
+        return;
+      }
       setDueDayDigits((digits) => appendDueDayDigit(digits, digit));
       return;
     }
@@ -166,6 +167,11 @@ export default function EditRecurringExpenseScreen() {
 
   function handleBackspace() {
     if (dateMode) {
+      if (!hasEditedDueDay) {
+        setHasEditedDueDay(true);
+        setDueDayDigits('');
+        return;
+      }
       setDueDayDigits((digits) => backspaceDueDay(digits));
       return;
     }
@@ -175,14 +181,6 @@ export default function EditRecurringExpenseScreen() {
       return;
     }
     setAmountText((text) => backspaceAmount(text));
-  }
-
-  function handleToggleDateMode() {
-    if (dateMode && dueDayDigits !== '') {
-      setCommittedDueDay(dueDayDigits);
-    }
-    setDueDayDigits('');
-    setDateMode((current) => !current);
   }
 
   async function handleTogglePaid() {
@@ -204,15 +202,19 @@ export default function EditRecurringExpenseScreen() {
   }
 
   async function handleConfirm() {
-    if (!canSubmit || dueDay === null) return;
+    if (!canSubmit) return;
+    // Left blank (cleared and never re-typed) -- fall back to the value this row already had
+    // rather than blocking the save or sending an invalid one (RecurringExpenseInput.dueDay is
+    // required, there's no "leave it unchanged" option server-side).
+    const finalDueDay = dueDay ?? Number(params.dueDay);
     try {
       await updateRecurringExpense.mutateAsync({
         recurringExpenseId: params.recurringExpenseId,
         name: name.trim(),
         amountCents: amountTextToCents(amountText),
         categoryId: selectedCategory.id,
-        budgetType,
-        dueDay,
+        budgetType: budgetTypeForCategory(selectedCategory),
+        dueDay: finalDueDay,
       });
       router.back();
     } catch {
@@ -310,35 +312,17 @@ export default function EditRecurringExpenseScreen() {
           />
         </View>
 
-        <View style={[styles.budgetTypeRow, { backgroundColor: colors.segment.track }]}>
-          {BUDGET_TYPES.map(({ key, label }) => (
-            <Pressable
-              key={key}
-              testID={`budget-type-${key}`}
-              style={[
-                styles.budgetTypeButton,
-                budgetType === key && { backgroundColor: colors.segment.active },
-              ]}
-              onPress={() => setBudgetType(key)}
-            >
-              <Text
-                style={[
-                  typography.scale.segmentLabel,
-                  {
-                    color:
-                      budgetType === key ? colors.segment.activeText : colors.segment.inactiveText,
-                  },
-                ]}
-              >
-                {label}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-
-        <Text style={[typography.scale.listSubtitle, styles.amountLabel, { color: colors.text.secondary }]}>
-          {dateMode ? 'Due day' : 'Amount'}
-        </Text>
+        {dateMode ? (
+          <Text
+            style={[
+              typography.scale.listSubtitle,
+              styles.amountLabel,
+              { color: colors.text.secondary },
+            ]}
+          >
+            Due day
+          </Text>
+        ) : null}
         <Text style={styles.amountRow}>
           {dateMode ? null : (
             <Text style={[styles.currencyPrefix, { color: colors.text.secondary }]}>€</Text>
@@ -349,16 +333,14 @@ export default function EditRecurringExpenseScreen() {
               typography.scale.calculatorAmount,
               {
                 color:
-                  dateMode && dueDayDisplayDigits === ''
-                    ? colors.text.placeholder
-                    : colors.text.primary,
+                  dateMode && dueDayDigits === '' ? colors.text.placeholder : colors.text.primary,
               },
             ]}
           >
             {dateMode
-              ? dueDayDisplayDigits === ''
+              ? dueDayDigits === ''
                 ? DUE_DAY_PLACEHOLDER
-                : formatTypedDueDay(dueDayDisplayDigits)
+                : formatTypedDueDay(dueDayDigits)
               : amountText || '0'}
           </Text>
         </Text>
@@ -371,7 +353,7 @@ export default function EditRecurringExpenseScreen() {
             onConfirm={handleConfirm}
             confirmDisabled={!canSubmit}
             dateMode={dateMode}
-            onToggleDateMode={handleToggleDateMode}
+            onToggleDateMode={() => setDateMode((current) => !current)}
           />
         </View>
 
@@ -451,13 +433,14 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
     gap: 12,
   },
+  // Full-width banner (not a small round pill) -- label on the left, checkmark (when Paid) at
+  // the far right edge, matching the mockup's actual layout.
   paidPill: {
     flexDirection: 'row',
-    alignSelf: 'flex-start',
     alignItems: 'center',
-    gap: 6,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
     borderRadius: 16,
   },
   identityRow: {
@@ -480,17 +463,6 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 20,
     fontSize: 16,
-  },
-  budgetTypeRow: {
-    flexDirection: 'row',
-    borderRadius: 20,
-    padding: 4,
-  },
-  budgetTypeButton: {
-    flex: 1,
-    borderRadius: 16,
-    paddingVertical: 8,
-    alignItems: 'center',
   },
   amountLabel: {
     textAlign: 'center',

@@ -36,12 +36,14 @@ const shoppingCategory = {
   direction: 'EXPENSE',
 };
 
+// Deliberately WANT (not NEED, like shoppingCategory) -- lets tests prove budgetType is
+// derived from whichever category is selected, not defaulted/hardcoded.
 const housingCategory = {
   id: 'c-housing',
   name: 'Housing',
   icon: 'moon',
   color: '#7048E8',
-  budgetType: 'NEED',
+  budgetType: 'WANT',
   direction: 'EXPENSE',
 };
 
@@ -145,10 +147,10 @@ describe('AddRecurringExpenseScreen', () => {
     expect(screen.queryByTestId('category-picker-backdrop')).toBeNull();
   });
 
-  it('uses the same shared AmountKeypad as Add Category -- toggling the calendar key switches the display to day-entry, showing a placeholder until a digit is typed', async () => {
+  it('uses the same shared AmountKeypad as Add Category -- toggling the calendar key switches the display to day-entry, showing a placeholder until a digit is typed, with no redundant "Amount" label', async () => {
     await renderScreen();
 
-    expect(screen.getByText('Amount')).toBeTruthy();
+    expect(screen.queryByText('Amount')).toBeNull();
     expect(screen.getByTestId('calculator-value').props.children).toBe('0');
 
     await fireEvent.press(screen.getByTestId('keypad-toggle-date'));
@@ -214,39 +216,14 @@ describe('AddRecurringExpenseScreen', () => {
     expect(screen.getByTestId('calculator-value').props.children).toBe('10');
   });
 
-  it('defaults to Need selected, and switches the highlighted button on tap', async () => {
-    function flatten(style: unknown): Record<string, unknown>[] {
-      return ([] as unknown[]).concat(style).filter(Boolean) as Record<string, unknown>[];
-    }
-
+  it('has no Need/Want picker at all -- budgetType is derived from the selected category, not asked for', async () => {
     await renderScreen();
 
-    expect(
-      flatten(screen.getByTestId('budget-type-NEED').props.style).some(
-        (s) => s.backgroundColor !== undefined,
-      ),
-    ).toBe(true);
-    expect(
-      flatten(screen.getByTestId('budget-type-WANT').props.style).some(
-        (s) => s.backgroundColor !== undefined,
-      ),
-    ).toBe(false);
-
-    await fireEvent.press(screen.getByTestId('budget-type-WANT'));
-
-    expect(
-      flatten(screen.getByTestId('budget-type-WANT').props.style).some(
-        (s) => s.backgroundColor !== undefined,
-      ),
-    ).toBe(true);
-    expect(
-      flatten(screen.getByTestId('budget-type-NEED').props.style).some(
-        (s) => s.backgroundColor !== undefined,
-      ),
-    ).toBe(false);
+    expect(screen.queryByText('Need')).toBeNull();
+    expect(screen.queryByText('Want')).toBeNull();
   });
 
-  it('submits createRecurringExpense with the full form and navigates back', async () => {
+  it('submits createRecurringExpense with the default category\'s (NEED) derived budgetType, and navigates back', async () => {
     await renderScreen();
 
     await fireEvent.changeText(screen.getByTestId('recurring-name-input'), 'Water');
@@ -254,7 +231,6 @@ describe('AddRecurringExpenseScreen', () => {
     await fireEvent.press(screen.getByTestId('keypad-digit-1'));
     await fireEvent.press(screen.getByTestId('keypad-digit-0'));
     await fireEvent.press(screen.getByTestId('keypad-toggle-date'));
-    await fireEvent.press(screen.getByTestId('budget-type-WANT'));
     await fireEvent.press(screen.getByTestId('keypad-digit-5'));
     await fireEvent.press(screen.getByTestId('keypad-decimal-point'));
     await fireEvent.press(screen.getByTestId('keypad-digit-0'));
@@ -266,11 +242,29 @@ describe('AddRecurringExpenseScreen', () => {
       name: 'Water',
       amountCents: 500,
       categoryId: 'c-shopping',
-      budgetType: 'WANT',
+      budgetType: 'NEED',
       dueDay: 10,
       month: '2026-09',
     });
     expect(mockedRouterBack).toHaveBeenCalledTimes(1);
+  });
+
+  it('submits the WANT-budgeted category\'s own derived budgetType when a different category is picked', async () => {
+    await renderScreen();
+
+    await fireEvent.changeText(screen.getByTestId('recurring-name-input'), 'Rent');
+    await fireEvent.press(screen.getByTestId('category-pill'));
+    await fireEvent.press(screen.getByTestId('existing-category-c-housing'));
+    await fireEvent.press(screen.getByTestId('keypad-toggle-date'));
+    await fireEvent.press(screen.getByTestId('keypad-digit-1'));
+    await fireEvent.press(screen.getByTestId('keypad-toggle-date'));
+    await fireEvent.press(screen.getByTestId('keypad-digit-5'));
+
+    await fireEvent.press(screen.getByTestId('keypad-confirm'));
+
+    expect(createMutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({ categoryId: 'c-housing', budgetType: 'WANT' }),
+    );
   });
 
   it('shows an inline error and does not navigate back when the mutation fails', async () => {

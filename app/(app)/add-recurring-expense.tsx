@@ -16,7 +16,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useCurrentMonth } from '../../src/api/budgetHomeQueries';
 import { useCategories } from '../../src/api/categoryQueries';
 import { useCreateRecurringExpense } from '../../src/api/recurringExpenseMutations';
-import type { BudgetType, Category } from '../../src/api/types';
+import type { Category } from '../../src/api/types';
 import { AmountKeypad } from '../../src/components/AmountKeypad';
 import { CategoryIcon } from '../../src/components/CategoryIcon';
 import { ExistingCategoryPicker } from '../../src/components/ExistingCategoryPicker';
@@ -33,13 +33,8 @@ import {
   formatTypedDueDay,
   isValidDueDay,
 } from '../../src/lib/dueDayInput';
+import { budgetTypeForCategory } from '../../src/lib/recurringBudgetType';
 import { useTheme } from '../../src/theme/ThemeProvider';
-
-// Need/Want only -- backend rejects 'savings' for a recurring expense (see docs/PLAN.md).
-const BUDGET_TYPES: { key: Extract<BudgetType, 'NEED' | 'WANT'>; label: string }[] = [
-  { key: 'NEED', label: 'Need' },
-  { key: 'WANT', label: 'Want' },
-];
 
 const DUE_DAY_PLACEHOLDER = 'Due date day';
 const CATALOG_LOAD_ERROR = "Couldn't load your budget categories.";
@@ -71,7 +66,6 @@ export default function AddRecurringExpenseScreen() {
   // only while the buffer is still empty.
   const [committedDueDay, setCommittedDueDay] = useState('');
   const [dueDayDigits, setDueDayDigits] = useState('');
-  const [budgetType, setBudgetType] = useState<BudgetType>('NEED');
   const [amountText, setAmountText] = useState('');
   // Whether the shared keypad is in day-entry mode (its calendar-toggle key) instead of
   // amount-entry -- same mechanism add-transaction.tsx uses for its date, see AmountKeypad's
@@ -146,7 +140,7 @@ export default function AddRecurringExpenseScreen() {
         name: name.trim(),
         amountCents: amountTextToCents(amountText),
         categoryId: selectedCategory.id,
-        budgetType,
+        budgetType: budgetTypeForCategory(selectedCategory),
         dueDay,
         month,
       });
@@ -236,41 +230,17 @@ export default function AddRecurringExpenseScreen() {
           />
         </View>
 
-        <View style={[styles.budgetTypeRow, { backgroundColor: colors.segment.track }]}>
-          {BUDGET_TYPES.map(({ key, label }) => (
-            <Pressable
-              key={key}
-              testID={`budget-type-${key}`}
-              style={[
-                styles.budgetTypeButton,
-                budgetType === key && { backgroundColor: colors.segment.active },
-              ]}
-              onPress={() => setBudgetType(key)}
-            >
-              <Text
-                style={[
-                  typography.scale.segmentLabel,
-                  {
-                    color:
-                      budgetType === key ? colors.segment.activeText : colors.segment.inactiveText,
-                  },
-                ]}
-              >
-                {label}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-
-        <Text
-          style={[
-            typography.scale.listSubtitle,
-            styles.amountLabel,
-            { color: colors.text.secondary },
-          ]}
-        >
-          {dateMode ? 'Due day' : 'Amount'}
-        </Text>
+        {dateMode ? (
+          <Text
+            style={[
+              typography.scale.listSubtitle,
+              styles.amountLabel,
+              { color: colors.text.secondary },
+            ]}
+          >
+            Due day
+          </Text>
+        ) : null}
         <Text style={styles.amountRow}>
           {dateMode ? null : (
             <Text style={[styles.currencyPrefix, { color: colors.text.secondary }]}>€</Text>
@@ -400,17 +370,6 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 20,
     fontSize: 16,
-  },
-  budgetTypeRow: {
-    flexDirection: 'row',
-    borderRadius: 20,
-    padding: 4,
-  },
-  budgetTypeButton: {
-    flex: 1,
-    borderRadius: 16,
-    paddingVertical: 8,
-    alignItems: 'center',
   },
   amountLabel: {
     textAlign: 'center',

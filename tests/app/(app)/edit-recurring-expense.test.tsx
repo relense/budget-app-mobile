@@ -50,12 +50,14 @@ const shoppingCategory = {
   direction: 'EXPENSE',
 };
 
+// Deliberately WANT (not NEED, like shoppingCategory) -- lets tests prove budgetType is
+// derived from whichever category is selected, not defaulted/hardcoded.
 const housingCategory = {
   id: 'c-housing',
   name: 'Housing',
   icon: 'moon',
   color: '#7048E8',
-  budgetType: 'NEED',
+  budgetType: 'WANT',
   direction: 'EXPENSE',
 };
 
@@ -122,11 +124,23 @@ describe('EditRecurringExpenseScreen', () => {
     expect(screen.getByTestId('calculator-value').props.children).toBe('10');
   });
 
-  it('uses the same shared AmountKeypad as Add Category', async () => {
+  it('uses the same shared AmountKeypad as Add Category, with no redundant "Amount" label', async () => {
     await renderScreen();
 
-    expect(screen.getByText('Amount')).toBeTruthy();
+    expect(screen.queryByText('Amount')).toBeNull();
     expect(screen.getByTestId('keypad-toggle-date')).toBeTruthy();
+  });
+
+  it('the Paid/Unpaid pill is a full-width banner, not a small round pill', async () => {
+    function flatten(style: unknown): Record<string, unknown>[] {
+      return ([] as unknown[]).concat(style).filter(Boolean) as Record<string, unknown>[];
+    }
+
+    await renderScreen();
+
+    const pillStyle = flatten(screen.getByTestId('paid-pill').props.style);
+    expect(pillStyle.some((s) => s.alignSelf === 'flex-start')).toBe(false);
+    expect(pillStyle.some((s) => s.justifyContent === 'space-between')).toBe(true);
   });
 
   it('shows Unpaid when paidThisMonth is false', async () => {
@@ -187,16 +201,15 @@ describe('EditRecurringExpenseScreen', () => {
     expect(mockedRouterBack).not.toHaveBeenCalled();
   });
 
-  it('lets the user edit name, category, Need/Want, due day, and amount, then saves via updateRecurringExpense', async () => {
+  it('lets the user edit name, category, due day, and amount, then saves via updateRecurringExpense with the newly-selected category\'s own derived budgetType', async () => {
     await renderScreen();
 
     await fireEvent.changeText(screen.getByTestId('recurring-name-input'), 'Water Bill');
     await fireEvent.press(screen.getByTestId('category-pill'));
     await fireEvent.press(screen.getByTestId('existing-category-c-housing'));
-    await fireEvent.press(screen.getByTestId('budget-type-WANT'));
-    // Toggling into day-entry mode resets the typed buffer, so the very first digit pressed
-    // replaces the pre-filled "10" outright (same "start fresh on the first press" rule as
-    // edit-category.tsx's amount field), landing on due day 5, not 105.
+    // The very first digit pressed in day-entry mode replaces the pre-filled "10" outright
+    // (same "start fresh on the first press" rule as the amount field below), landing on due
+    // day 5, not 105.
     await fireEvent.press(screen.getByTestId('keypad-toggle-date'));
     await fireEvent.press(screen.getByTestId('keypad-digit-5'));
     await fireEvent.press(screen.getByTestId('keypad-toggle-date'));
@@ -219,14 +232,30 @@ describe('EditRecurringExpenseScreen', () => {
     expect(mockedRouterBack).toHaveBeenCalledTimes(1);
   });
 
-  it('rejects a due day of 0 -- confirm stays disabled', async () => {
+  it('has no Need/Want picker at all -- budgetType is derived from the selected category, not asked for', async () => {
+    await renderScreen();
+
+    expect(screen.queryByText('Need')).toBeNull();
+    expect(screen.queryByText('Want')).toBeNull();
+  });
+
+  it('due day is not required to confirm -- unlike Add, Edit always has an existing value to fall back to', async () => {
+    await renderScreen();
+
+    // Name and amount are pre-filled valid already; nothing about the due day (still showing
+    // its pre-filled "10", untouched) should block confirm.
+    expect(screen.getByTestId('keypad-confirm').props.accessibilityState?.disabled).toBe(false);
+  });
+
+  it('typing an invalid due day (0) and saving falls back to the original due day instead of sending 0', async () => {
     await renderScreen();
 
     await fireEvent.press(screen.getByTestId('keypad-toggle-date'));
     await fireEvent.press(screen.getByTestId('keypad-digit-0'));
     await fireEvent.press(screen.getByTestId('keypad-toggle-date'));
+    await fireEvent.press(screen.getByTestId('keypad-confirm'));
 
-    expect(screen.getByTestId('keypad-confirm').props.accessibilityState?.disabled).toBe(true);
+    expect(updateMutateAsync).toHaveBeenCalledWith(expect.objectContaining({ dueDay: 10 }));
   });
 
   it('rejects a second due-day digit that would push the value past 31', async () => {
@@ -239,13 +268,37 @@ describe('EditRecurringExpenseScreen', () => {
     expect(screen.getByTestId('calculator-value').props.children).toBe('3');
   });
 
-  it('backspacing while showing the pre-filled due day (nothing typed yet this session) is a no-op, not a partial delete of the old value', async () => {
+  it('pressing delete on the pre-filled due day clears it to blank (placeholder), not a no-op', async () => {
     await renderScreen();
 
     await fireEvent.press(screen.getByTestId('keypad-toggle-date'));
     await fireEvent.press(screen.getByTestId('keypad-backspace'));
 
-    expect(screen.getByTestId('calculator-value').props.children).toBe('10');
+    expect(screen.getByText('Due date day')).toBeTruthy();
+    expect(screen.queryByTestId('calculator-value')?.props.children).not.toBe('10');
+  });
+
+  it('pressing delete again once already blank keeps it blank, not an error', async () => {
+    await renderScreen();
+
+    await fireEvent.press(screen.getByTestId('keypad-toggle-date'));
+    await fireEvent.press(screen.getByTestId('keypad-backspace'));
+    await fireEvent.press(screen.getByTestId('keypad-backspace'));
+
+    expect(screen.getByText('Due date day')).toBeTruthy();
+  });
+
+  it('typing a new due day after clearing it, then deleting again, also shows blank', async () => {
+    await renderScreen();
+
+    await fireEvent.press(screen.getByTestId('keypad-toggle-date'));
+    await fireEvent.press(screen.getByTestId('keypad-backspace'));
+    await fireEvent.press(screen.getByTestId('keypad-digit-5'));
+    expect(screen.getByTestId('calculator-value').props.children).toBe('5');
+
+    await fireEvent.press(screen.getByTestId('keypad-backspace'));
+
+    expect(screen.getByText('Due date day')).toBeTruthy();
   });
 
   it('re-entering day-entry mode after typing (without confirming) shows what was typed, not the original pre-filled value', async () => {
@@ -257,6 +310,22 @@ describe('EditRecurringExpenseScreen', () => {
     await fireEvent.press(screen.getByTestId('keypad-toggle-date'));
 
     expect(screen.getByTestId('calculator-value').props.children).toBe('7');
+  });
+
+  it('saving with the due day left blank (cleared, never re-typed) sends the original due day, silently, with no error', async () => {
+    await renderScreen();
+
+    await fireEvent.press(screen.getByTestId('keypad-toggle-date'));
+    await fireEvent.press(screen.getByTestId('keypad-backspace'));
+    await fireEvent.press(screen.getByTestId('keypad-toggle-date'));
+
+    expect(screen.getByTestId('keypad-confirm').props.accessibilityState?.disabled).toBe(false);
+
+    await fireEvent.press(screen.getByTestId('keypad-confirm'));
+
+    expect(updateMutateAsync).toHaveBeenCalledWith(expect.objectContaining({ dueDay: 10 }));
+    expect(screen.queryByText('Something went wrong. Please try again.')).toBeNull();
+    expect(mockedRouterBack).toHaveBeenCalledTimes(1);
   });
 
   it('shows a hint toast instead of the delete confirm when Delete is pressed while Paid (blocked server-side)', async () => {

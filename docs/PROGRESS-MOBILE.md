@@ -558,6 +558,47 @@ default.
       while the buffer is still empty, and re-entering day-entry mode after
       typing (without confirming) correctly shows what was just typed, not
       the original pre-filled value. 385 tests total across 41 suites.
+- [x] Six more follow-up fixes on Recurring Expense, from direct user
+      feedback against the running app. **Drawer presentation bug**:
+      `app/(app)/_layout.tsx` never registered `add-recurring-expense`,
+      `edit-recurring-expense`, `add-income`, or `income-received` with
+      `presentation: 'modal'` — each screen's own grabber/bottom-sheet JSX
+      was correct, but without this Stack.Screen entry it just pushed as a
+      plain full-screen route. Added a regression test
+      (`tests/app/(app)/_layout.test.tsx`) asserting every non-index screen
+      is registered as a modal, so this can't silently recur. **Recurrent
+      row layout**: Paid/Unpaid moved from the subtitle slot (under the
+      name) to `secondaryAmountText` (under the amount, matching the
+      mockup); the now-empty subtitle shows a literal "WIP due date"
+      placeholder (no real per-row due-date display exists yet).
+      **Icon-tap-to-pay**: `ListRow` gained an optional `onIconPress` prop
+      (every other call site unaffected when omitted) — tapping a
+      Recurrent row's icon marks it paid directly, one plain full-amount
+      transaction dated today; only wired for unpaid rows (an already-paid
+      row's icon has no handler), split/partial payments deferred per the
+      user. **Need/Want removed from both Add and Edit**: the category
+      already carries a Need/Want/Savings designation, so asking again was
+      redundant. New shared `src/lib/recurringBudgetType.ts`
+      (`budgetTypeForCategory`) derives the recurring expense's own
+      required `budgetType` from the selected category's, falling back to
+      Need for a Savings-budgeted category (never valid for a recurring
+      expense). **"Amount" label removed** on both screens — implicit
+      from context; "Due day" is kept when the keypad is in date-entry
+      mode, since that one does need disambiguating. **Edit's Paid/Unpaid
+      pill is now a full-width banner** (`justifyContent: 'space-between'`,
+      no `alignSelf: 'flex-start'`) instead of a small round pill, matching
+      the mockup. **Edit's due-day backspace behavior reworked**: previously
+      a backspace against an untouched pre-filled value was a no-op (fell
+      back to showing the old value); now it clears to blank on first
+      press, same "first touch replaces/clears outright" pattern as the
+      amount field's own `hasEditedAmount` guard, applied to due day via a
+      new `hasEditedDueDay` flag. Saving with the due day left blank no
+      longer blocks or requires a value at all (Edit's `canSubmit` dropped
+      the due-day check entirely, unlike Add, which still requires one) —
+      it silently falls back to the row's original due day
+      (`dueDay ?? Number(params.dueDay)`), since `RecurringExpenseInput.dueDay`
+      is required server-side and there's no "leave unchanged" option to
+      send instead. 410 tests total across 43 suites.
 
 **Scaffold caveats worth knowing before the next `npm install` in this
 repo** (SDK 57 is very new — pin these deliberately, don't let npm grab
