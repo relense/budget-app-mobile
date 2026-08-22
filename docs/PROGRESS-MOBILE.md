@@ -64,8 +64,9 @@ export/delete, missing `User` FK retrofit) and GraphQL Code Generator on top.
 
 ## Phase 2 — Mobile app
 
-**Status: scaffold, auth flow, Budget Home, Add/Edit Category, and
-Add/Edit Transaction screens done.** Per `docs/PLAN.md` /
+**Status: scaffold, auth flow, Budget Home, Add/Edit Category,
+Add/Edit Transaction, and Add/Edit Recurring Expense + Income screens
+done.** Per `docs/PLAN.md` /
 `.claude/CLAUDE.md`: before any screen work, must interview for design
 references (mockups + Excel structure) and grill layout/states/copy/colors/
 edge-cases per screen — never assume or fill gaps with a "reasonable"
@@ -438,6 +439,74 @@ default.
       happened to return — the backend doesn't document any particular
       `categoryMonths`/catalog ordering, so this is a client-side
       guarantee, not a backend contract. 286 tests total across 35 suites.
+- [x] Recurrent and Income tabs — previously data-only stubs (rows
+      rendered, but "New ..." rows and every row action were inert, see
+      the Budget Home bullet above). Grilled over three rounds (no
+      mockup existed for either screen at first; the user then pointed to
+      the real ones — `Available Budgeted - Home Available(1)/(2).png`,
+      `Shopping pressed expense.png` through `(3)`) before writing any
+      code, per `CLAUDE.md`'s "ask before frontend work" rule. One real
+      backend gap surfaced and was designed around rather than treated as
+      a blocker: **there is no "unmark paid" mutation** —
+      `markRecurringPaid` only ever creates a `Transaction`, so unmarking
+      (recurring) and clearing a received income (below) both work by
+      deleting the transaction(s) the mark/receive action created, using
+      transaction `id`s `CATEGORY_MONTHS_QUERY`/`RECURRING_EXPENSES_QUERY`
+      now fetch (previously only `date`) — flagged to the user as a
+      genuine interface question, not silently worked around.
+      - **Recurring expenses**: `app/(app)/add-recurring-expense.tsx`
+        (category picker scoped to the *full* EXPENSE catalog, not just
+        categories unused this month — a recurring expense can share an
+        already-active category; name; a plain 1-31 due-day field, not
+        the `AmountKeypad`'s date-mode, since a due day has no
+        month/year component; Need/Want toggle, no Savings — the backend
+        rejects it; amount — calls `createRecurringExpense`) and
+        `app/(app)/edit-recurring-expense.tsx`, reached only by swiping a
+        row (tapping does nothing, same as Available/Expenses) —
+        combines a Paid/Unpaid pill (instant tap-toggle: Unpaid→Paid
+        calls `markRecurringPaid` with whatever amount is currently
+        shown + today; Paid→Unpaid deletes every linked transaction this
+        month) with full editing of name/category/Need-Want/due-day/
+        amount (`updateRecurringExpense`) and Delete
+        (`removeRecurringExpenseFromMonth`) in one screen, per the user's
+        explicit direction over the grilling rounds. New
+        `src/api/recurringExpenseMutations.ts` mirrors
+        `transactionMutations.ts`'s shape exactly (plain functions +
+        `requestWithAuth`-taking wrappers + hooks).
+      - **Income**: still just a `Category` (direction `INCOME`) + a
+        per-month budget/expected amount — no new backend entity, and
+        deliberately no "expected receipt date" field (would need a
+        backend schema change, explicitly deferred by the user).
+        `app/(app)/add-income.tsx` mirrors Add Category's
+        existing-vs-create flow minus the Need/Want/Savings picker, using
+        a new small `INCOME_ICON_PALETTE` (`briefcase`/`shield` —
+        already mapped in `CategoryIcon.tsx` but excluded from the
+        16-icon expense palette) and a new
+        `createIncomeCategoryWithBudget` (sibling of
+        `createCategoryWithBudget`, direction fixed `INCOME`, no
+        `budgetType`). `app/(app)/income-received.tsx`, reached by
+        *tapping* an Income row (the one place Recurrent/Income diverge
+        — Income reacts to both tap and swipe, Recurrent only to swipe):
+        "Received" has no stored field, it's derived the same way the
+        row's own amount already is (`actualAmountCents > 0`); the
+        amount keypad prefills with the expected amount but is editable
+        for a short/partial payment: confirm always adds one more
+        `Transaction` against that income row's own `categoryMonthId`
+        (repeatable, for split payments), and the Received/Not-received
+        pill is the quick all-or-nothing toggle (tap while Not received
+        = same as confirm; tap while Received = clear the month). Swipe
+        still opens the *existing* `edit-category.tsx` completely
+        unchanged — it was already generic across direction, so
+        deleting/renaming/rebudgeting an income category needed no new
+        code.
+      - Two small existing-file generalizations, both additive/flagged
+        rather than silent: `src/lib/unusedCategories.ts`'s
+        `filterUnusedExpenseCategories`/`isDuplicateCategoryName` gained
+        a required `direction` param (first renamed
+        `filterUnusedCategories`) instead of a second income-only copy;
+        `IconPicker.tsx` gained an optional `palette` prop defaulting to
+        the expense palette, so `add-category.tsx`'s call site needed no
+        change. 349 tests total across 40 suites.
 
 **Scaffold caveats worth knowing before the next `npm install` in this
 repo** (SDK 57 is very new — pin these deliberately, don't let npm grab
