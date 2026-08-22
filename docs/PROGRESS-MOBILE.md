@@ -758,6 +758,23 @@ default.
       already has its own client-side pre-check for its one blocking case
       (paid transactions) and wasn't touched. 402 tests total across 41
       suites.
+- [x] Two small follow-up polish items on that same delete-blocked toast.
+      **Longer duration**: this screen's `TOAST_DURATION_MS` bumped from
+      2500ms to 4500ms (the other 4 screens sharing that constant name are
+      untouched) — the message is a full sentence and the default was
+      tuned for short generic copy. **Reworded** from "This category has
+      transactions or recurring expenses linked to it. Delete those
+      first." to "This category still has transactions or recurring
+      expenses linked to it — delete those first." (leads with "still
+      has" to read as a direct answer to "why can't I delete this",
+      one clause via em dash instead of two flat sentences). **Toast text
+      now justified**: `Toast.tsx`'s text style gained `alignSelf:
+      'stretch'` + `textAlign: 'justify'` so a wrapped multi-line message
+      reads with even line edges instead of ragged-right — a shared
+      component change, so it applies to every toast in the app, not just
+      this one. 402 tests total across 41 suites (no new tests; only the
+      two hardcoded message-text assertions in `edit-category.test.tsx`
+      needed updating for the reworded copy).
 
 **Scaffold caveats worth knowing before the next `npm install` in this
 repo** (SDK 57 is very new — pin these deliberately, don't let npm grab

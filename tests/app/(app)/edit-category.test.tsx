@@ -216,7 +216,7 @@ describe('EditCategoryScreen', () => {
 
     expect(
       await screen.findByText(
-        'This category has transactions or recurring expenses linked to it. Delete those first.',
+        'This category still has transactions or recurring expenses linked to it — delete those first.',
       ),
     ).toBeTruthy();
     expect(mockedRouterBack).not.toHaveBeenCalled();
@@ -240,7 +240,7 @@ describe('EditCategoryScreen', () => {
 
     expect(
       await screen.findByText(
-        'This category has transactions or recurring expenses linked to it. Delete those first.',
+        'This category still has transactions or recurring expenses linked to it — delete those first.',
       ),
     ).toBeTruthy();
     expect(mockedRouterBack).not.toHaveBeenCalled();

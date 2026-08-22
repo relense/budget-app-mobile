@@ -30,13 +30,16 @@ import {
 } from '../../src/lib/categoryIconPalette';
 import { useTheme } from '../../src/theme/ThemeProvider';
 
-const TOAST_DURATION_MS = 2500;
+// Longer than the other screens' 2500ms -- this screen's delete-blocked toast
+// (CATEGORY_IN_USE_MESSAGE below) is a full sentence and needs more time to read than the
+// short generic fallback.
+const TOAST_DURATION_MS = 4500;
 const GENERIC_ERROR_MESSAGE = 'Something went wrong. Please try again.';
 // removeCategoryFromMonth throws one of these two codes (see docs/SERVICES.md) when the
 // category still has real data hanging off it -- surfaced as a specific, actionable message
 // instead of the generic fallback, so the user knows exactly what to go delete first.
 const CATEGORY_IN_USE_MESSAGE =
-  'This category has transactions or recurring expenses linked to it. Delete those first.';
+  'This category still has transactions or recurring expenses linked to it — delete those first.';
 
 export default function EditCategoryScreen() {
   const { colors } = useTheme();
