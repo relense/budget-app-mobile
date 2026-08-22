@@ -6,7 +6,7 @@ This repo is **Phase 2** of the project: the mobile app that consumes an already
 
 ## Status
 
-Expo project scaffolded (TypeScript, Expo Router, ESLint + Prettier, Jest + React Native Testing Library) — no screens yet. Before any screen work begins, this project requires a design interview (mockups + the source Excel budget structure) rather than guessing layout/copy/behavior from assumptions.
+Auth flow (email OTP), Budget Home, Add/Edit Category, and Add/Edit Transaction screens are built and wired to the live API, including session token refresh (reactive + proactive) and screen-specific retryable error states. See `docs/PROGRESS-MOBILE.md` for the full build log. Every screen still goes through a design interview (mockups + the source Excel budget structure) before work starts, rather than guessing layout/copy/behavior from assumptions.
 
 ## Stack
 
