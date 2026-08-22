@@ -148,6 +148,7 @@ const transactions = [
     categoryMonth: {
       id: 'cm-shopping',
       monthlyBudgetCents: 70000,
+      actualAmountCents: 19420,
       category: {
         id: 'c-shopping',
         name: 'Shopping',
@@ -218,6 +219,14 @@ describe('HomeScreen', () => {
     expect(mockedRouterPush).toHaveBeenCalledWith('/add-category');
   });
 
+  it('navigates to Add Transaction when the bottom-nav + is pressed', async () => {
+    await renderHomeScreen();
+
+    await fireEvent.press(screen.getByTestId('add-transaction-button'));
+
+    expect(mockedRouterPush).toHaveBeenCalledWith('/add-transaction');
+  });
+
   it('navigates to Edit Category, with the right params, when a row is swipe-edited', async () => {
     await renderHomeScreen();
 
@@ -245,6 +254,37 @@ describe('HomeScreen', () => {
 
     expect(screen.getByText('Continente')).toBeTruthy();
     expect(screen.queryByText('New budget category')).toBeNull();
+  });
+
+  it('navigates to Edit Transaction, with the right params, when an Expenses row is swipe-edited', async () => {
+    await renderHomeScreen();
+
+    await fireEvent.press(screen.getByText('Expenses'));
+    await fireEvent.press(screen.getByTestId('swipe-edit-action-t-continente'));
+
+    expect(mockedRouterPush).toHaveBeenCalledWith({
+      pathname: '/edit-transaction',
+      params: {
+        transactionId: 't-continente',
+        categoryMonthId: 'cm-shopping',
+        amountCents: '968',
+        date: '2026-09-02',
+        merchant: 'Continente',
+      },
+    });
+  });
+
+  it('shows the category\'s cumulative spend percentage on an Expenses row, not just this one transaction\'s own share', async () => {
+    // Regression test: this transaction is only 968/70000 = 1% of the budget on its own, but
+    // the category (per categoryMonth.actualAmountCents) has spent 19420/70000 = 28% overall --
+    // the row must reflect the latter, so a category that's actually over budget shows over
+    // 100% instead of a misleadingly small single-transaction ratio.
+    await renderHomeScreen();
+
+    await fireEvent.press(screen.getByText('Expenses'));
+
+    expect(screen.getByText('28%')).toBeTruthy();
+    expect(screen.queryByText('1%')).toBeNull();
   });
 
   it('switches to the Recurrent tab and shows the "new" row plus bills', async () => {

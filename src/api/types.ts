@@ -46,6 +46,7 @@ export interface Transaction {
   categoryMonth: {
     id: string;
     monthlyBudgetCents: number;
+    actualAmountCents: number;
     category: Category;
   };
 }

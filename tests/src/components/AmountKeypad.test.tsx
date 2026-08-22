@@ -72,4 +72,19 @@ describe('AmountKeypad', () => {
 
     expect(onConfirm).not.toHaveBeenCalled();
   });
+
+  it('does not render a date-toggle key when onToggleDateMode is not passed', async () => {
+    await renderKeypad();
+
+    expect(screen.queryByTestId('keypad-toggle-date')).toBeNull();
+  });
+
+  it('calls onToggleDateMode when the calendar key is pressed', async () => {
+    const onToggleDateMode = jest.fn();
+    await renderKeypad({ onToggleDateMode });
+
+    await fireEvent.press(screen.getByTestId('keypad-toggle-date'));
+
+    expect(onToggleDateMode).toHaveBeenCalled();
+  });
 });

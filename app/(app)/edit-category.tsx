@@ -18,18 +18,13 @@ import {
   appendDecimalPoint,
   appendDigit,
   backspaceAmount,
+  centsToAmountText,
 } from '../../src/lib/amountInput';
 import { colorForIcon } from '../../src/lib/categoryIconPalette';
 import { useTheme } from '../../src/theme/ThemeProvider';
 
 const TOAST_DURATION_MS = 2500;
 const GENERIC_ERROR_MESSAGE = 'Something went wrong. Please try again.';
-
-// Bare cents-string -> raw keypad text (e.g. 70000 -> "700.00") so the keypad starts pre-filled
-// with the category's current budget rather than empty.
-function centsToAmountText(cents: number): string {
-  return (cents / 100).toFixed(2);
-}
 
 export default function EditCategoryScreen() {
   const { colors } = useTheme();

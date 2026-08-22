@@ -74,6 +74,7 @@ const TRANSACTIONS_QUERY = `
       categoryMonth {
         id
         monthlyBudgetCents
+        actualAmountCents
         category {
           id
           name
