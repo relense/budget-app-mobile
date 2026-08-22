@@ -101,11 +101,13 @@ beforeEach(() => {
     data: { month: '2026-09', locked: false },
     isLoading: false,
     isError: false,
+    refetch: jest.fn(),
   });
   mockedUseCategoryMonths.mockReturnValue({
     data: [shoppingCategoryMonth, eatingOutCategoryMonth],
     isLoading: false,
     isError: false,
+    refetch: jest.fn(),
   });
   updateMutateAsync.mockResolvedValue(undefined);
   deleteMutateAsync.mockResolvedValue(undefined);
@@ -123,12 +125,33 @@ describe('EditTransactionScreen', () => {
     expect(screen.queryByTestId('keypad-confirm')).toBeNull();
   });
 
-  it('shows an error state when the category months fetch fails', async () => {
-    mockedUseCategoryMonths.mockReturnValue({ data: undefined, isLoading: false, isError: true });
+  it('shows a specific, retryable error when the category months fetch fails', async () => {
+    const refetchMonth = jest.fn();
+    const refetchCategoryMonths = jest.fn();
+    mockedUseCurrentMonth.mockReturnValue({
+      data: { month: '2026-09', locked: false },
+      isLoading: false,
+      isError: false,
+      refetch: refetchMonth,
+    });
+    mockedUseCategoryMonths.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      refetch: refetchCategoryMonths,
+    });
 
     await renderScreen();
 
     expect(screen.getByTestId('edit-transaction-error')).toBeTruthy();
+    expect(
+      screen.getByText("Couldn't load your budget categories to edit this transaction."),
+    ).toBeTruthy();
+
+    await fireEvent.press(screen.getByTestId('retry-button'));
+
+    expect(refetchMonth).toHaveBeenCalledTimes(1);
+    expect(refetchCategoryMonths).toHaveBeenCalledTimes(1);
   });
 
   it('pre-fills the amount and merchant, showing the transaction\'s current category', async () => {

@@ -243,6 +243,20 @@ default.
       `actualAmountCents ÷ budget` (only visibly wrong once a category has
       more than one transaction) — `TRANSACTIONS_QUERY` now also fetches
       `categoryMonth.actualAmountCents`. 245 tests total across 32 suites.
+- [x] Retryable, screen-specific error states (`src/components/RetryableError.tsx`)
+      — replaces the one shared "Something went wrong loading this. Please
+      try again." text that previously blanked out an entire screen (no
+      retry, and on Budget Home no way to navigate away at all — not even
+      sign out) on any query failure. Each screen/query now has its own
+      distinct, greppable message (e.g. "Couldn't load your transactions."
+      vs "Couldn't load your budget categories.") plus a "Try again" button
+      that calls that query's `refetch()`. Budget Home
+      (`app/(app)/index.tsx`) keeps its header/tabs/bottom-nav shell up at
+      all times now — only the list area shows the spinner/error, scoped to
+      whichever query (current month vs. the active tab's own query)
+      actually failed. Add/Edit Transaction and Add Category keep the modal
+      grabber visible and add a retry button where there previously was
+      none. 249 tests total across 33 suites.
 
 **Scaffold caveats worth knowing before the next `npm install` in this
 repo** (SDK 57 is very new — pin these deliberately, don't let npm grab

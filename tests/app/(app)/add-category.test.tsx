@@ -74,9 +74,15 @@ beforeEach(() => {
     data: { month: '2026-09', locked: false },
     isLoading: false,
     isError: false,
+    refetch: jest.fn(),
   });
-  mockedUseCategoryMonths.mockReturnValue({ data: [], isLoading: false, isError: false });
-  mockedUseCategories.mockReturnValue({ data: [], isLoading: false, isError: false });
+  mockedUseCategoryMonths.mockReturnValue({
+    data: [],
+    isLoading: false,
+    isError: false,
+    refetch: jest.fn(),
+  });
+  mockedUseCategories.mockReturnValue({ data: [], isLoading: false, isError: false, refetch: jest.fn() });
   createMutateAsync.mockResolvedValue(undefined);
   addExistingMutateAsync.mockResolvedValue(undefined);
   mockedUseCreateCategoryWithBudget.mockReturnValue({
@@ -130,28 +136,48 @@ describe('AddCategoryScreen', () => {
     expect(screen.queryByTestId('category-name-input')).toBeNull();
   });
 
-  it('shows an error state instead of a false-empty create-new form when the catalog fetch fails', async () => {
+  it('shows a specific, retryable error instead of a false-empty create-new form when the catalog fetch fails', async () => {
     // Regression test: react-query reports a failed query as isLoading: false with data still
     // undefined -- the exact same "resolved but empty" shape the original loading race
     // exploited. Without an explicit isError check, this would silently let the duplicate-name
     // guard run against an empty catalog instead of surfacing an error.
-    mockedUseCategories.mockReturnValue({ data: undefined, isLoading: false, isError: true });
+    const refetchCategories = jest.fn();
+    mockedUseCategories.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      refetch: refetchCategories,
+    });
 
     await renderScreen();
 
     expect(screen.getByTestId('add-category-error')).toBeTruthy();
+    expect(screen.getByText("Couldn't load your category catalog.")).toBeTruthy();
     expect(screen.queryByTestId('add-category-loading')).toBeNull();
     expect(screen.queryByTestId('category-name-input')).toBeNull();
     expect(screen.queryByTestId('choose-existing-button')).toBeNull();
+
+    await fireEvent.press(screen.getByTestId('retry-button'));
+    expect(refetchCategories).toHaveBeenCalledTimes(1);
   });
 
-  it('shows an error state when the current-month fetch fails, instead of spinning forever', async () => {
-    mockedUseCurrentMonth.mockReturnValue({ data: undefined, isLoading: false, isError: true });
+  it('shows a specific, retryable error when the current-month fetch fails, instead of spinning forever', async () => {
+    const refetchMonth = jest.fn();
+    mockedUseCurrentMonth.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      refetch: refetchMonth,
+    });
 
     await renderScreen();
 
     expect(screen.getByTestId('add-category-error')).toBeTruthy();
+    expect(screen.getByText("Couldn't load your category catalog.")).toBeTruthy();
     expect(screen.queryByTestId('add-category-loading')).toBeNull();
+
+    await fireEvent.press(screen.getByTestId('retry-button'));
+    expect(refetchMonth).toHaveBeenCalledTimes(1);
   });
 
   it('goes straight to the create-new form when no unused categories exist', async () => {
