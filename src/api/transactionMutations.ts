@@ -97,12 +97,12 @@ export async function deleteTransaction(
 // the bank balance (derived from every transaction since its checkpoint) -- so all three
 // mutations below invalidate the same set.
 export function useCreateTransaction() {
-  const { accessToken } = useAuth();
+  const { requestWithAuth } = useAuth();
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: (input: CreateTransactionInput) =>
-      createTransaction(getApiUrl(), accessToken as string, input),
+      requestWithAuth((token) => createTransaction(getApiUrl(), token, input)),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
       queryClient.invalidateQueries({ queryKey: ['categoryMonths'] });
@@ -112,12 +112,12 @@ export function useCreateTransaction() {
 }
 
 export function useUpdateTransaction() {
-  const { accessToken } = useAuth();
+  const { requestWithAuth } = useAuth();
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: (input: UpdateTransactionInput) =>
-      updateTransaction(getApiUrl(), accessToken as string, input),
+      requestWithAuth((token) => updateTransaction(getApiUrl(), token, input)),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
       queryClient.invalidateQueries({ queryKey: ['categoryMonths'] });
@@ -127,12 +127,12 @@ export function useUpdateTransaction() {
 }
 
 export function useDeleteTransaction() {
-  const { accessToken } = useAuth();
+  const { requestWithAuth } = useAuth();
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: (input: DeleteTransactionInput) =>
-      deleteTransaction(getApiUrl(), accessToken as string, input),
+      requestWithAuth((token) => deleteTransaction(getApiUrl(), token, input)),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
       queryClient.invalidateQueries({ queryKey: ['categoryMonths'] });

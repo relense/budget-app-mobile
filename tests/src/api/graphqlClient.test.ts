@@ -1,6 +1,6 @@
 import { GraphQLClient } from 'graphql-request';
 
-import { graphqlRequest } from '../../../src/api/graphqlClient';
+import { graphqlRequest, isUnauthenticatedError } from '../../../src/api/graphqlClient';
 
 jest.mock('graphql-request');
 
@@ -23,5 +23,29 @@ describe('graphqlRequest', () => {
     });
     expect(mockRequest).toHaveBeenCalledWith('query { ping }', { foo: 'bar' });
     expect(result).toEqual({ ping: 'pong' });
+  });
+});
+
+describe('isUnauthenticatedError', () => {
+  it('is true for a GraphQL error carrying the UNAUTHENTICATED code', () => {
+    const err = { response: { errors: [{ message: 'nope', extensions: { code: 'UNAUTHENTICATED' } }] } };
+    expect(isUnauthenticatedError(err)).toBe(true);
+  });
+
+  it('is false for a different GraphQL error code', () => {
+    const err = {
+      response: { errors: [{ message: 'nope', extensions: { code: 'CATEGORY_NOT_FOUND' } }] },
+    };
+    expect(isUnauthenticatedError(err)).toBe(false);
+  });
+
+  it('is false for a plain network error with no GraphQL response shape', () => {
+    expect(isUnauthenticatedError(new Error('network error'))).toBe(false);
+  });
+
+  it('is false for null/undefined/non-object input', () => {
+    expect(isUnauthenticatedError(null)).toBe(false);
+    expect(isUnauthenticatedError(undefined)).toBe(false);
+    expect(isUnauthenticatedError('nope')).toBe(false);
   });
 });
