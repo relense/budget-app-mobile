@@ -74,6 +74,9 @@ const TRANSACTIONS_QUERY = `
       merchant
       note
       direction
+      recurringExpense {
+        name
+      }
       categoryMonth {
         id
         monthlyBudgetCents

@@ -281,7 +281,7 @@ export default function HomeScreen() {
           <ListRow
             icon={<CategoryIcon name={t.categoryMonth.category.icon} color={colors.text.primary} />}
             circleColor={t.categoryMonth.category.color}
-            title={t.merchant ?? t.categoryMonth.category.name}
+            title={t.merchant ?? t.recurringExpense?.name ?? t.categoryMonth.category.name}
             subtitle={formatDate(t.date)}
             amountText={formatCents(t.amountCents)}
           />

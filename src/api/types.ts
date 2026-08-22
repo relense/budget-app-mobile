@@ -47,6 +47,7 @@ export interface Transaction {
   merchant: string | null;
   note: string | null;
   direction: Direction;
+  recurringExpense: { name: string } | null;
   categoryMonth: {
     id: string;
     monthlyBudgetCents: number;
