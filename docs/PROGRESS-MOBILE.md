@@ -918,6 +918,18 @@ default.
       reads `selectedCategory.name` — correctly flagged as "nothing to
       assert on yet" rather than a real gap.) 431 tests total across 42
       suites (3 new).
+- [x] Fixed a direct user-reported bug: Expenses-tab rows for transactions
+      created by marking a recurring expense paid showed the *category*
+      name (e.g. "Housing") instead of the recurring expense's own name
+      (e.g. "Rent") — `markRecurringPaid` always leaves `merchant`/`note`
+      null, and the row title fell back straight to
+      `categoryMonth.category.name`. `TRANSACTIONS_QUERY` now also fetches
+      the linked `recurringExpense { name }` (already existed
+      server-side, just wasn't queried), and the title fallback chain is
+      `merchant ?? recurringExpense?.name ?? category.name`. TDD: added a
+      failing test first (transaction fixture with `merchant: null` +
+      `recurringExpense: { name: 'Rent' }`), confirmed red, then fixed.
+      432 tests total across 42 suites (1 new).
 
 **Scaffold caveats worth knowing before the next `npm install` in this
 repo** (SDK 57 is very new — pin these deliberately, don't let npm grab
