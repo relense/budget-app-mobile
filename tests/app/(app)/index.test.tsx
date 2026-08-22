@@ -207,8 +207,9 @@ describe('HomeScreen', () => {
     expect(screen.getByText('New Category')).toBeTruthy();
     expect(screen.getByText('Shopping')).toBeTruthy();
     expect(screen.getByText('Eating Out')).toBeTruthy();
-    // The "Available" tab label itself, plus one "Available" subtitle per row (2 categories).
-    expect(screen.getAllByText('Available')).toHaveLength(3);
+    // Just the "Available" tab label itself now -- each row's own subtitle reads "Budget".
+    expect(screen.getAllByText('Available')).toHaveLength(1);
+    expect(screen.getAllByText('Budget')).toHaveLength(2);
   });
 
   it("shows each category's amount spent so far as the headline figure, with its total budget in gray underneath", async () => {
@@ -225,7 +226,9 @@ describe('HomeScreen', () => {
     expect(screen.queryByText('28%')).toBeNull();
   });
 
-  it('shows "Overspent" in red instead of "Available" once a category has spent past its budget', async () => {
+  it('keeps the plain "Budget" subtitle even once a category has spent past its budget', async () => {
+    // The spent (headline) vs. budget (gray, secondary) figures already make an over-budget
+    // category obvious at a glance -- no separate "Overspent" state/color is needed.
     mockedUseCategoryMonths.mockImplementation((_month: string, direction: string) => ({
       ...idle,
       data:
@@ -235,15 +238,9 @@ describe('HomeScreen', () => {
     }));
     await renderHomeScreen();
 
-    expect(screen.getByText('Overspent')).toBeTruthy();
-    const overspentLabelStyle = ([] as unknown[])
-      .concat(screen.getByText('Overspent').props.style)
-      .filter(Boolean) as Record<string, unknown>[];
-    expect(overspentLabelStyle.some((s) => s.color === '#F2705C')).toBe(true);
-
-    // The category that's still within budget keeps the normal "Available" label.
-    expect(screen.getByText('Eating Out')).toBeTruthy();
-    expect(screen.getAllByText('Available')).toHaveLength(2); // tab label + Eating Out's row
+    expect(screen.getByText('€800.00')).toBeTruthy();
+    expect(screen.queryByText('Overspent')).toBeNull();
+    expect(screen.getAllByText('Budget')).toHaveLength(2);
   });
 
   it('navigates to Add Category when "New Category" is pressed', async () => {

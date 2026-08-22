@@ -144,40 +144,38 @@ export default function HomeScreen() {
 
   function renderRows() {
     if (tab === 'AVAILABLE') {
-      return (expenseCategoryMonths.data ?? []).map((cm) => {
-        const isOverBudget = cm.actualAmountCents > cm.monthlyBudgetCents;
-        return (
-          <SwipeableRow
-            key={`${cm.id}-${listResetKey}`}
-            testID={`swipe-edit-action-${cm.id}`}
-            onEdit={() =>
-              router.push({
-                pathname: '/edit-category',
-                params: {
-                  categoryMonthId: cm.id,
-                  categoryId: cm.category.id,
-                  name: cm.category.name,
-                  icon: cm.category.icon,
-                  color: cm.category.color,
-                  budgetType: cm.category.budgetType ?? '',
-                  direction: cm.category.direction,
-                  monthlyBudgetCents: String(cm.monthlyBudgetCents),
-                },
-              })
-            }
-          >
-            <ListRow
-              icon={<CategoryIcon name={cm.category.icon} color={colors.text.primary} />}
-              circleColor={cm.category.color}
-              title={cm.category.name}
-              subtitle={isOverBudget ? 'Overspent' : 'Available'}
-              subtitleColor={isOverBudget ? colors.button.deleteBackground : undefined}
-              amountText={formatCents(cm.actualAmountCents)}
-              secondaryAmountText={formatCents(cm.monthlyBudgetCents)}
-            />
-          </SwipeableRow>
-        );
-      });
+      return (expenseCategoryMonths.data ?? []).map((cm) => (
+        <SwipeableRow
+          key={`${cm.id}-${listResetKey}`}
+          testID={`swipe-edit-action-${cm.id}`}
+          onEdit={() =>
+            router.push({
+              pathname: '/edit-category',
+              params: {
+                categoryMonthId: cm.id,
+                categoryId: cm.category.id,
+                name: cm.category.name,
+                icon: cm.category.icon,
+                color: cm.category.color,
+                budgetType: cm.category.budgetType ?? '',
+                direction: cm.category.direction,
+                monthlyBudgetCents: String(cm.monthlyBudgetCents),
+              },
+            })
+          }
+        >
+          <ListRow
+            icon={<CategoryIcon name={cm.category.icon} color={colors.text.primary} />}
+            circleColor={cm.category.color}
+            title={cm.category.name}
+            // The spent (headline) vs. budget (gray, secondary) figures already make an
+            // over-budget category obvious at a glance -- no separate "Overspent" state needed.
+            subtitle="Budget"
+            amountText={formatCents(cm.actualAmountCents)}
+            secondaryAmountText={formatCents(cm.monthlyBudgetCents)}
+          />
+        </SwipeableRow>
+      ));
     }
     if (tab === 'EXPENSES') {
       return expenseTransactions.map((t) => (
